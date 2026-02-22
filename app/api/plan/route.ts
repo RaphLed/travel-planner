@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     const vibes = typeof body.vibes === "string" ? body.vibes : "sun, nature, solitude";
     const days = typeof body.days === "number" ? body.days : 5;
 
-    const r = await client.responses.create({
+    const response = await client.responses.create({
       model: "gpt-4o-mini",
       text: { format: { type: "json_object" } },
       input: [
@@ -62,4 +62,36 @@ Rules:
 - Each "blocks" item MUST have a unique id. Use the format: d{day}-{m|a|e}-{index}, e.g. d3-a-2.
 - Each day should have 2–4 blocks per time period (morning/afternoon/evening) unless the vibe implies slower pace.
 - "base_location" should be a realistic place (city/town/region).
-- "notes" should be short and practical (1–2 sentences).
+- "notes" should be short and practical (1–2 sentences).`,
+        },
+      ],
+    });
+
+    if (response.error) {
+      return new Response(
+        JSON.stringify({ error: response.error.message ?? "Model error" }),
+        { status: 502, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    const raw = response.output_text?.trim() ?? "";
+    if (!raw) {
+      return new Response(
+        JSON.stringify({ error: "Empty model response" }),
+        { status: 502, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    const data = JSON.parse(raw) as { trip: unknown; itinerary: unknown };
+    return new Response(JSON.stringify(data), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Server error";
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}
