@@ -2,17 +2,30 @@
 
 import { useMemo, useState } from "react";
 
-type DayPlan = {
+type Block = {
+  id: string;
+  time: "morning" | "afternoon" | "evening";
+  title: string;
+  type: "food" | "nature" | "culture" | "nightlife" | "relax" | "logistics";
+  notes: string;
+};
+
+type Day = {
   day: number;
-  morning: string[];
-  afternoon: string[];
-  evening: string[];
+  base_location: string;
+  blocks: Block[];
 };
 
 type PlanResponse = {
-  title: string;
-  summary: string;
-  days: DayPlan[];
+  trip: {
+    title: string;
+    summary: string;
+    vibe_tags: string[];
+    recommended_region: string;
+    best_season: string;
+    pace: "slow" | "moderate" | "fast";
+  };
+  itinerary: Day[];
 };
 
 export default function Home() {
@@ -120,19 +133,53 @@ export default function Home() {
               </div>
             ) : (
               <div>
-                <h2 className="text-2xl font-semibold">{plan.title}</h2>
-                <p className="mt-2 text-neutral-300">{plan.summary}</p>
+<h2 className="text-2xl font-semibold">{plan.trip.title}</h2>
+<p className="mt-2 text-neutral-300">{plan.trip.summary}</p>
+
+<div className="mt-4 flex flex-wrap gap-2 text-xs">
+  <span className="rounded-full border border-neutral-800 bg-neutral-950/50 px-3 py-1 text-neutral-200">
+    Region: {plan.trip.recommended_region}
+  </span>
+  <span className="rounded-full border border-neutral-800 bg-neutral-950/50 px-3 py-1 text-neutral-200">
+    Season: {plan.trip.best_season}
+  </span>
+  <span className="rounded-full border border-neutral-800 bg-neutral-950/50 px-3 py-1 text-neutral-200">
+    Pace: {plan.trip.pace}
+  </span>
+
+  {plan.trip.vibe_tags?.map((t) => (
+    <span
+      key={t}
+      className="rounded-full border border-neutral-800 bg-neutral-950/30 px-3 py-1 text-neutral-300"
+    >
+      #{t}
+    </span>
+  ))}
+</div>
 
                 <div className="mt-6 space-y-4">
-                  {plan.days?.map((d) => (
+                  {plan.itinerary?.map((d) => (
                     <div key={d.day} className="rounded-2xl border border-neutral-800 bg-neutral-950/30 p-4">
-                      <h3 className="text-lg font-medium mb-3">Day {d.day}</h3>
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                        <TimeBlock title="Morning" items={d.morning} />
-                        <TimeBlock title="Afternoon" items={d.afternoon} />
-                        <TimeBlock title="Evening" items={d.evening} />
-                      </div>
-                    </div>
+  <div className="mb-3 flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+    <h3 className="text-lg font-medium">Day {d.day}</h3>
+    <span className="text-sm text-neutral-400">Base: {d.base_location}</span>
+  </div>
+
+  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+    <TimeBlock
+      title="Morning"
+      items={d.blocks.filter((b) => b.time === "morning")}
+    />
+    <TimeBlock
+      title="Afternoon"
+      items={d.blocks.filter((b) => b.time === "afternoon")}
+    />
+    <TimeBlock
+      title="Evening"
+      items={d.blocks.filter((b) => b.time === "evening")}
+    />
+  </div>
+</div>
                   ))}
                 </div>
               </div>
@@ -144,17 +191,32 @@ export default function Home() {
   );
 }
 
-function TimeBlock({ title, items }: { title: string; items: string[] }) {
+function TimeBlock({ title, items }: { title: string; items: Block[] }) {
   return (
     <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-3">
       <p className="text-sm font-medium text-neutral-100">{title}</p>
+
       <ul className="mt-2 space-y-2 text-sm text-neutral-300">
-        {(items ?? []).length === 0 ? (
+        {items.length === 0 ? (
           <li className="text-neutral-500">—</li>
         ) : (
-          items.map((x, i) => (
-            <li key={i} className="rounded-lg border border-neutral-800 bg-neutral-950/60 p-2">
-              {x}
+          items.map((b) => (
+            <li
+              key={b.id}
+              className="rounded-lg border border-neutral-800 bg-neutral-950/60 p-2"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="text-neutral-100">{b.title}</div>
+                  {b.notes ? (
+                    <div className="mt-1 text-xs text-neutral-400">{b.notes}</div>
+                  ) : null}
+                </div>
+
+                <span className="shrink-0 rounded-full border border-neutral-800 bg-neutral-950/50 px-2 py-0.5 text-[11px] text-neutral-300">
+                  {b.type}
+                </span>
+              </div>
             </li>
           ))
         )}
