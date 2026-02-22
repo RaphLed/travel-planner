@@ -1,65 +1,164 @@
-import Image from "next/image";
+"use client";
+
+import { useMemo, useState } from "react";
+
+type DayPlan = {
+  day: number;
+  morning: string[];
+  afternoon: string[];
+  evening: string[];
+};
+
+type PlanResponse = {
+  title: string;
+  summary: string;
+  days: DayPlan[];
+};
 
 export default function Home() {
+  const [vibes, setVibes] = useState("space, solitude, nature, sun");
+  const [days, setDays] = useState(7);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [plan, setPlan] = useState<PlanResponse | null>(null);
+
+  const canGenerate = useMemo(() => vibes.trim().length > 0 && days >= 1, [vibes, days]);
+
+  async function generate() {
+    if (!canGenerate) return;
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vibes, days }),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Request failed: ${res.status}`);
+      }
+
+      const data = (await res.json()) as PlanResponse;
+      setPlan(data);
+    } catch (e: any) {
+      setError(e?.message ?? "Something went wrong.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <main className="min-h-screen bg-neutral-950 text-neutral-50">
+      <div className="mx-auto max-w-6xl px-6 py-10">
+        <header className="mb-8">
+          <h1 className="text-3xl font-semibold tracking-tight">Travel Planner</h1>
+          <p className="mt-2 text-neutral-300">
+            Local prototype: vibes → AI itinerary → (next) drag-and-drop timeline.
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+        </header>
+
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          {/* Inputs */}
+          <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5">
+            <h2 className="text-lg font-medium">Trip input</h2>
+
+            <label className="mt-4 block text-sm text-neutral-300" htmlFor="vibes">
+              Vibes / keywords
+            </label>
+            <textarea
+              id="vibes"
+              className="mt-2 w-full rounded-xl border border-neutral-800 bg-neutral-950/60 p-3 text-sm outline-none focus:ring-2 focus:ring-neutral-500"
+              rows={4}
+              value={vibes}
+              onChange={(e) => setVibes(e.target.value)}
+              placeholder="e.g. warm, sea, street food, architecture, calm"
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+            <label className="mt-4 block text-sm text-neutral-300" htmlFor="days">
+              Duration (days)
+            </label>
+            <input
+              id="days"
+              type="number"
+              min={1}
+              max={60}
+              value={days}
+              onChange={(e) => setDays(Number(e.target.value))}
+              className="mt-2 w-full rounded-xl border border-neutral-800 bg-neutral-950/60 p-3 text-sm outline-none focus:ring-2 focus:ring-neutral-500"
+            />
+
+            <button
+              onClick={generate}
+              disabled={!canGenerate || loading}
+              className="mt-5 w-full rounded-xl bg-neutral-50 px-4 py-3 text-sm font-medium text-neutral-900 disabled:opacity-50"
+              aria-busy={loading}
+            >
+              {loading ? "Generating…" : "Generate itinerary"}
+            </button>
+
+            {error && (
+              <p className="mt-4 rounded-xl border border-red-900 bg-red-950/40 p-3 text-sm text-red-200">
+                {error}
+              </p>
+            )}
+
+            <p className="mt-4 text-xs text-neutral-400">
+              Next: convert this into a horizontal timeline with drag-and-drop.
+            </p>
+          </section>
+
+          {/* Output */}
+          <section className="md:col-span-2 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5">
+            {!plan ? (
+              <div className="rounded-2xl border border-neutral-800 bg-neutral-950/30 p-6 text-neutral-300">
+                <p className="text-sm">
+                  No plan yet. Enter vibes and click <span className="text-neutral-50">Generate itinerary</span>.
+                </p>
+              </div>
+            ) : (
+              <div>
+                <h2 className="text-2xl font-semibold">{plan.title}</h2>
+                <p className="mt-2 text-neutral-300">{plan.summary}</p>
+
+                <div className="mt-6 space-y-4">
+                  {plan.days?.map((d) => (
+                    <div key={d.day} className="rounded-2xl border border-neutral-800 bg-neutral-950/30 p-4">
+                      <h3 className="text-lg font-medium mb-3">Day {d.day}</h3>
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                        <TimeBlock title="Morning" items={d.morning} />
+                        <TimeBlock title="Afternoon" items={d.afternoon} />
+                        <TimeBlock title="Evening" items={d.evening} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
         </div>
-      </main>
+      </div>
+    </main>
+  );
+}
+
+function TimeBlock({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-3">
+      <p className="text-sm font-medium text-neutral-100">{title}</p>
+      <ul className="mt-2 space-y-2 text-sm text-neutral-300">
+        {(items ?? []).length === 0 ? (
+          <li className="text-neutral-500">—</li>
+        ) : (
+          items.map((x, i) => (
+            <li key={i} className="rounded-lg border border-neutral-800 bg-neutral-950/60 p-2">
+              {x}
+            </li>
+          ))
+        )}
+      </ul>
     </div>
   );
 }
