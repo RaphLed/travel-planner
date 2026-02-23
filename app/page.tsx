@@ -16,7 +16,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Block = {
   id: string;
@@ -124,6 +124,19 @@ function findBlockAndSource(
   return null;
 }
 
+function updateBlockInItinerary(
+  itinerary: Day[],
+  blockId: string,
+  updates: Partial<Pick<Block, "title" | "notes" | "type">>
+): Day[] {
+  return itinerary.map((day) => ({
+    ...day,
+    blocks: day.blocks.map((b) =>
+      b.id === blockId ? { ...b, ...updates } : b
+    ),
+  }));
+}
+
 export default function Home() {
   const [vibes, setVibes] = useState("space, solitude, nature, sun");
   const [days, setDays] = useState(7);
@@ -204,6 +217,17 @@ export default function Home() {
     setPlan({ ...plan, itinerary: newItinerary });
   }
 
+  const handleBlockChange = useCallback(
+    (blockId: string, updates: Partial<Pick<Block, "title" | "notes" | "type">>) => {
+      if (!plan?.itinerary) return;
+      setPlan({
+        ...plan,
+        itinerary: updateBlockInItinerary(plan.itinerary, blockId, updates),
+      });
+    },
+    [plan]
+  );
+
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-50">
       <div className="mx-auto max-w-6xl px-6 py-10">
@@ -260,7 +284,7 @@ export default function Home() {
             )}
 
             <p className="mt-4 text-xs text-neutral-400">
-              Drag activity blocks between days and time slots to reorder.
+              Drag blocks to reorder; click title or notes to edit inline.
             </p>
           </section>
 
@@ -330,6 +354,7 @@ export default function Home() {
                                     : "Evening"
                               }
                               items={d.blocks.filter((b) => b.time === time)}
+                              onBlockChange={handleBlockChange}
                             />
                           ))}
                         </div>
@@ -351,11 +376,13 @@ function TimeBlock({
   time,
   title,
   items,
+  onBlockChange,
 }: {
   day: number;
   time: TimeSlot;
   title: string;
   items: Block[];
+  onBlockChange: (blockId: string, updates: Partial<Pick<Block, "title" | "notes" | "type">>) => void;
 }) {
   const id = droppableId(day, time);
   const { setNodeRef, isOver } = useDroppable({
@@ -382,7 +409,11 @@ function TimeBlock({
             </li>
           ) : (
             items.map((b) => (
-              <SortableBlock key={b.id} block={b} />
+              <SortableBlock
+                key={b.id}
+                block={b}
+                onBlockChange={onBlockChange}
+              />
             ))
           )}
         </ul>
@@ -391,7 +422,22 @@ function TimeBlock({
   );
 }
 
-function SortableBlock({ block }: { block: Block }) {
+const BLOCK_TYPES: Block["type"][] = [
+  "food",
+  "nature",
+  "culture",
+  "nightlife",
+  "relax",
+  "logistics",
+];
+
+function SortableBlock({
+  block,
+  onBlockChange,
+}: {
+  block: Block;
+  onBlockChange: (blockId: string, updates: Partial<Pick<Block, "title" | "notes" | "type">>) => void;
+}) {
   const {
     attributes,
     listeners,
@@ -401,9 +447,34 @@ function SortableBlock({ block }: { block: Block }) {
     isDragging,
   } = useSortable({ id: block.id });
 
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(block.title);
+  const [notesDraft, setNotesDraft] = useState(block.notes);
+
+  useEffect(() => {
+    if (!editingTitle) setTitleDraft(block.title);
+  }, [block.title, editingTitle]);
+  useEffect(() => {
+    if (!editingNotes) setNotesDraft(block.notes);
+  }, [block.notes, editingNotes]);
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
+  };
+
+  const saveTitle = () => {
+    setEditingTitle(false);
+    const t = titleDraft.trim();
+    if (t && t !== block.title) onBlockChange(block.id, { title: t });
+    else setTitleDraft(block.title);
+  };
+
+  const saveNotes = () => {
+    setEditingNotes(false);
+    if (notesDraft !== block.notes) onBlockChange(block.id, { notes: notesDraft });
+    else setNotesDraft(block.notes);
   };
 
   return (
@@ -414,22 +485,105 @@ function SortableBlock({ block }: { block: Block }) {
         isDragging ? "opacity-80 shadow-lg ring-2 ring-neutral-500" : ""
       }`}
     >
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-start gap-2">
         <div
-          className="flex flex-1 cursor-grab active:cursor-grabbing"
+          className="mt-0.5 shrink-0 cursor-grab touch-none rounded p-0.5 text-neutral-500 hover:bg-neutral-800/50 active:cursor-grabbing"
           {...attributes}
           {...listeners}
           aria-label={`Drag to reorder: ${block.title}`}
         >
-          <div className="text-neutral-100">{block.title}</div>
-          {block.notes ? (
-            <div className="mt-1 text-xs text-neutral-400">{block.notes}</div>
-          ) : null}
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <circle cx="9" cy="5" r="1" />
+            <circle cx="9" cy="12" r="1" />
+            <circle cx="9" cy="19" r="1" />
+            <circle cx="15" cy="5" r="1" />
+            <circle cx="15" cy="12" r="1" />
+            <circle cx="15" cy="19" r="1" />
+          </svg>
         </div>
 
-        <span className="shrink-0 rounded-full border border-neutral-800 bg-neutral-950/50 px-2 py-0.5 text-[11px] text-neutral-300">
-          {block.type}
-        </span>
+        <div className="min-w-0 flex-1">
+          {editingTitle ? (
+            <input
+              type="text"
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={saveTitle}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveTitle();
+                if (e.key === "Escape") {
+                  setTitleDraft(block.title);
+                  setEditingTitle(false);
+                }
+              }}
+              className="w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-0.5 text-sm text-neutral-100 outline-none focus:ring-1 focus:ring-neutral-500"
+              autoFocus
+              aria-label="Edit activity title"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setEditingTitle(true)}
+              className="w-full text-left text-neutral-100 hover:text-neutral-50 focus:outline-none focus:ring-1 focus:ring-neutral-500 focus:ring-inset rounded"
+            >
+              {block.title}
+            </button>
+          )}
+
+          {editingNotes ? (
+            <textarea
+              value={notesDraft}
+              onChange={(e) => setNotesDraft(e.target.value)}
+              onBlur={saveNotes}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  setNotesDraft(block.notes);
+                  setEditingNotes(false);
+                }
+              }}
+              className="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-xs text-neutral-300 outline-none focus:ring-1 focus:ring-neutral-500 resize-none"
+              rows={2}
+              autoFocus
+              aria-label="Edit activity notes"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setEditingNotes(true)}
+              className={`mt-1 block w-full text-left text-xs text-neutral-400 hover:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-neutral-500 focus:ring-inset rounded ${!block.notes ? "italic text-neutral-500" : ""}`}
+            >
+              {block.notes || "Add notes…"}
+            </button>
+          )}
+
+          <select
+            value={block.type}
+            onChange={(e) =>
+              onBlockChange(block.id, {
+                type: e.target.value as Block["type"],
+              })
+            }
+            className="mt-2 rounded-full border border-neutral-800 bg-neutral-950/50 px-2 py-0.5 text-[11px] text-neutral-300 focus:outline-none focus:ring-1 focus:ring-neutral-500"
+            aria-label="Activity type"
+          >
+            {BLOCK_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
     </li>
   );

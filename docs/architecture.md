@@ -14,7 +14,7 @@
 3. API validates env and body, calls OpenAI (Responses API, `json_object` output), parses response.
 4. API returns JSON `{ trip, itinerary }` to the client.
 5. Client sets `plan` state and renders trip header + day cards; each day has three time blocks (Morning / Afternoon / Evening) with activity blocks.
-6. Drag-and-drop updates `plan.itinerary` in place (reorder / move blocks between days and time slots). Uses @dnd-kit/core and @dnd-kit/sortable; each time slot is a droppable zone; each block is sortable.
+6. Drag-and-drop updates `plan.itinerary` (reorder / move blocks). Inline editing updates title, notes, and type. Uses @dnd-kit/core and @dnd-kit/sortable; each time slot is a droppable zone; each block is sortable with a grip handle.
 
 ## Conventions
 

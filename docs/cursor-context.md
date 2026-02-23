@@ -56,9 +56,9 @@ Build an AI-powered travel planning platform with:
 - Accessibility compliance
 - Professional-grade UX
 
-## Next step: editable activity blocks
+## Next step: save/load trips
 
-Drag-and-drop itinerary is implemented. Each activity block can be dragged between days and time slots (Morning/Afternoon/Evening); state updates in the browser only.
+Drag-and-drop itinerary and editable activity blocks are implemented. Each activity block can be dragged between days and time slots (Morning/Afternoon/Evening); title, notes, and type are editable inline. State updates in the browser only.
 
-Next: make activity blocks editable (inline edit for title, notes, type). See `docs/how-it-works.md` for data flow and `docs/vision-and-quality.md` for design bar.
+Next: save/load trips (persistence). See `docs/how-it-works.md` for data flow and `docs/vision-and-quality.md` for design bar.
 

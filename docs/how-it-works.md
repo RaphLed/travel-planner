@@ -13,10 +13,11 @@ flowchart LR
   C --> D[See day-by-day itinerary]
   D --> E[Morning / Afternoon / Evening blocks]
   E --> F[Drag blocks to reorder or move]
-  F --> G[State updates in browser only]
+  F --> G[Click title/notes to edit inline]
+  G --> H[State updates in browser only]
 ```
 
-**In words:** The user types what they’re in the mood for (e.g. “space, solitude, nature, sun”) and how many days. After they click **Generate itinerary**, they get a trip idea (title, summary, region, season, pace) and a day-by-day plan. Each day is split into Morning, Afternoon, and Evening, with activity blocks. They can drag those blocks to reorder within a slot or move them to another day or time slot; the itinerary state updates in the browser (no persistence yet).
+**In words:** The user types what they’re in the mood for (e.g. “space, solitude, nature, sun”) and how many days. After they click **Generate itinerary**, they get a trip idea (title, summary, region, season, pace) and a day-by-day plan. Each day is split into Morning, Afternoon, and Evening, with activity blocks. They can drag blocks (via the grip handle) to reorder or move between days/slots. They can click the title or notes to edit inline, and change the activity type via a dropdown. All changes update the itinerary state in the browser (no persistence yet).
 
 ---
 
@@ -41,10 +42,12 @@ sequenceDiagram
   P->>U: Render trip header + day cards + blocks
   U->>P: Drag block to new slot
   P->>P: handleDragEnd → update plan.itinerary immutably
+  U->>P: Click title/notes or change type
+  P->>P: handleBlockChange → update block in plan.itinerary
   P->>U: Re-render itinerary
 ```
 
-**In words:** The React page sends a single POST with the user’s vibes and day count. The API route calls OpenAI with a fixed schema (trip metadata + itinerary with blocks). The API returns that JSON; the client stores it in state and renders the trip and days. When the user drags a block to another day or time slot, the client updates `plan.itinerary` immutably and re-renders. No database yet — everything lives in memory on the client.
+**In words:** The React page sends a single POST with the user’s vibes and day count. The API route calls OpenAI with a fixed schema (trip metadata + itinerary with blocks). The API returns that JSON; the client stores it in state and renders the trip and days. When the user drags a block or edits it (title, notes, type), the client updates `plan.itinerary` immutably and re-renders. No database yet — everything lives in memory on the client.
 
 ---
 
@@ -58,7 +61,7 @@ flowchart TB
     Page --> DND["DndContext (@dnd-kit)"]
     Page --> UI["UI: form + trip header + day cards"]
     UI --> TimeBlock["TimeBlock: droppable zone + SortableContext"]
-    TimeBlock --> SortableBlock["SortableBlock: draggable activity"]
+    TimeBlock --> SortableBlock["SortableBlock: draggable + editable (title, notes, type)"]
     DND --> TimeBlock
   end
 
@@ -71,7 +74,7 @@ flowchart TB
   Route -->|"JSON { trip, itinerary }"| Page
 ```
 
-**In words:** The only page is `app/page.tsx`. It holds all state and wraps the itinerary in `DndContext` (@dnd-kit). Each time slot (Morning, Afternoon, Evening) is a droppable zone with id `day-${day}-${time}`; each activity is a sortable item. On drag end, the client updates `plan.itinerary` immutably. The only API route is `app/api/plan/route.ts`; it talks to OpenAI and returns the plan.
+**In words:** The only page is `app/page.tsx`. It holds all state and wraps the itinerary in `DndContext` (@dnd-kit). Each time slot (Morning, Afternoon, Evening) is a droppable zone with id `day-${day}-${time}`; each activity is a sortable, editable block (grip handle for drag; click title/notes to edit; type dropdown). On drag end or block edit, the client updates `plan.itinerary` immutably. The only API route is `app/api/plan/route.ts`; it talks to OpenAI and returns the plan.
 
 ---
 
@@ -94,7 +97,7 @@ flowchart LR
   B --> BL[Block: id, time, title, type, notes]
 ```
 
-**In words:** A plan has two top-level parts: **trip** (metadata and vibe) and **itinerary** (list of days). Each day has a day number, base location, and **blocks**. Each block has an id (e.g. `d1-m-1`), a time slot (morning/afternoon/evening), title, type (food, nature, culture, etc.), and notes. Drag-and-drop reorders and moves blocks between days and time slots; the same structure is updated in client state (and will be persisted when save/load is added).
+**In words:** A plan has two top-level parts: **trip** (metadata and vibe) and **itinerary** (list of days). Each day has a day number, base location, and **blocks**. Each block has an id (e.g. `d1-m-1`), a time slot (morning/afternoon/evening), title, type (food, nature, culture, etc.), and notes. Drag-and-drop reorders and moves blocks; inline editing updates title, notes, and type. All changes update client state (and will be persisted when save/load is added).
 
 ---
 
