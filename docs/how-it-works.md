@@ -16,7 +16,7 @@ flowchart LR
   F --> G[State updates in browser only]
 ```
 
-**In words:** The user types what they’re in the mood for (e.g. “space, solitude, nature, sun”) and how many days. After they click **Generate itinerary**, they get a trip idea (title, summary, region, season, pace) and a day-by-day plan. Each day is split into Morning, Afternoon, and Evening, with activity blocks. Soon they’ll be able to drag those blocks to reorder within a slot or move them to another day or time slot; the itinerary state updates in the browser (no persistence yet).
+**In words:** The user types what they’re in the mood for (e.g. “space, solitude, nature, sun”) and how many days. After they click **Generate itinerary**, they get a trip idea (title, summary, region, season, pace) and a day-by-day plan. Each day is split into Morning, Afternoon, and Evening, with activity blocks. They can drag those blocks to reorder within a slot or move them to another day or time slot; the itinerary state updates in the browser (no persistence yet).
 
 ---
 
