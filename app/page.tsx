@@ -3,9 +3,12 @@
 import {
   DndContext,
   DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
   KeyboardSensor,
   PointerSensor,
   closestCenter,
+  defaultScreenReaderInstructions,
   useDroppable,
   useSensor,
   useSensors,
@@ -137,14 +140,64 @@ function updateBlockInItinerary(
   }));
 }
 
+type SavedTrip = { id: string; created_at: string; updated_at: string; payload: PlanResponse };
+
 export default function Home() {
   const [vibes, setVibes] = useState("space, solitude, nature, sun");
   const [days, setDays] = useState(7);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [plan, setPlan] = useState<PlanResponse | null>(null);
+  const [savedTrips, setSavedTrips] = useState<SavedTrip[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [loadingTrips, setLoadingTrips] = useState(false);
+  const [dbAvailable, setDbAvailable] = useState<boolean | null>(null);
+  const [tripPhoto, setTripPhoto] = useState<{ url: string; alt: string } | null>(null);
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
   const canGenerate = useMemo(() => vibes.trim().length > 0 && days >= 1, [vibes, days]);
+
+  const activeBlock = useMemo(() => {
+    if (!plan?.itinerary || !activeDragId) return null;
+    return findBlockAndSource(plan.itinerary, activeDragId)?.block ?? null;
+  }, [plan?.itinerary, activeDragId]);
+
+  useEffect(() => {
+    if (!plan?.trip) {
+      setTripPhoto(null);
+      return;
+    }
+    const query = plan.trip.recommended_region || plan.trip.title || "travel";
+    fetch(`/api/photo?q=${encodeURIComponent(query)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { url?: string; alt?: string } | null) => {
+        if (data?.url) setTripPhoto({ url: data.url, alt: data.alt ?? query });
+        else setTripPhoto(null);
+      })
+      .catch(() => setTripPhoto(null));
+  }, [plan?.trip?.title, plan?.trip?.recommended_region]);
+
+  const fetchTrips = useCallback(async () => {
+    setLoadingTrips(true);
+    try {
+      const res = await fetch("/api/trips");
+      if (res.ok) {
+        const data = (await res.json()) as SavedTrip[];
+        setSavedTrips(data);
+        setDbAvailable(true);
+      } else {
+        setDbAvailable(false);
+      }
+    } catch {
+      setDbAvailable(false);
+    } finally {
+      setLoadingTrips(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTrips();
+  }, [fetchTrips]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -177,8 +230,52 @@ export default function Home() {
     }
   }
 
+  async function saveTrip() {
+    if (!plan) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/trips", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payload: plan }),
+      });
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        throw new Error(err.error ?? "Failed to save");
+      }
+      await fetchTrips();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to save trip.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function loadTrip(id: string) {
+    setError(null);
+    try {
+      const res = await fetch(`/api/trips/${id}`);
+      if (!res.ok) throw new Error("Trip not found");
+      const data = (await res.json()) as SavedTrip;
+      const payload = data.payload as PlanResponse;
+      if (payload?.trip && Array.isArray(payload?.itinerary)) {
+        setPlan(payload);
+      } else {
+        throw new Error("Invalid trip data");
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load trip.");
+    }
+  }
+
+  function handleDragStart(event: DragStartEvent) {
+    setActiveDragId(String(event.active.id));
+  }
+
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
+    setActiveDragId(null);
     if (!plan?.itinerary || !over || active.id === over.id) return;
 
     const source = findBlockAndSource(plan.itinerary, String(active.id));
@@ -229,33 +326,33 @@ export default function Home() {
   );
 
   return (
-    <main className="min-h-screen bg-neutral-950 text-neutral-50">
+    <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
       <div className="mx-auto max-w-6xl px-6 py-10">
         <header className="mb-8">
           <h1 className="text-3xl font-semibold tracking-tight">Travel Planner</h1>
-          <p className="mt-2 text-neutral-300">
-            Local prototype: vibes → AI itinerary → drag-and-drop timeline.
+          <p className="mt-2 text-[var(--muted)]">
+            Your vibes → AI itinerary → your trip universe. Elaborate, tweak, and save.
           </p>
         </header>
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
           {/* Inputs */}
-          <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5">
+          <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
             <h2 className="text-lg font-medium">Trip input</h2>
 
-            <label className="mt-4 block text-sm text-neutral-300" htmlFor="vibes">
+            <label className="mt-4 block text-sm text-[var(--muted)]" htmlFor="vibes">
               Vibes / keywords
             </label>
             <textarea
               id="vibes"
-              className="mt-2 w-full rounded-xl border border-neutral-800 bg-neutral-950/60 p-3 text-sm outline-none focus:ring-2 focus:ring-neutral-500"
+              className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--muted-bg)] p-3 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]"
               rows={4}
               value={vibes}
               onChange={(e) => setVibes(e.target.value)}
               placeholder="e.g. warm, sea, street food, architecture, calm"
             />
 
-            <label className="mt-4 block text-sm text-neutral-300" htmlFor="days">
+            <label className="mt-4 block text-sm text-[var(--muted)]" htmlFor="days">
               Duration (days)
             </label>
             <input
@@ -265,77 +362,142 @@ export default function Home() {
               max={60}
               value={days}
               onChange={(e) => setDays(Number(e.target.value))}
-              className="mt-2 w-full rounded-xl border border-neutral-800 bg-neutral-950/60 p-3 text-sm outline-none focus:ring-2 focus:ring-neutral-500"
+              className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--muted-bg)] p-3 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]"
             />
 
             <button
               onClick={generate}
               disabled={!canGenerate || loading}
-              className="mt-5 w-full rounded-xl bg-neutral-50 px-4 py-3 text-sm font-medium text-neutral-900 disabled:opacity-50"
+              className="mt-5 w-full rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
               aria-busy={loading}
             >
               {loading ? "Generating…" : "Generate itinerary"}
             </button>
 
             {error && (
-              <p className="mt-4 rounded-xl border border-red-900 bg-red-950/40 p-3 text-sm text-red-200">
+              <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
                 {error}
               </p>
             )}
 
-            <p className="mt-4 text-xs text-neutral-400">
+            <p className="mt-4 text-xs text-[var(--muted)]">
               Drag blocks to reorder; click title or notes to edit inline.
             </p>
+
+            {dbAvailable === false && (
+              <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">
+                Add Supabase env vars to save and load trips.
+              </p>
+            )}
+            {dbAvailable === true && (
+              <>
+                <button
+                  type="button"
+                  onClick={saveTrip}
+                  disabled={!plan || saving}
+                  className="mt-4 w-full rounded-xl border border-[var(--border)] bg-[var(--muted-bg)] px-4 py-2.5 text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+                >
+                  {saving ? "Saving…" : "Save this trip"}
+                </button>
+                <div className="mt-4">
+                  <button
+                    type="button"
+                    onClick={fetchTrips}
+                    disabled={loadingTrips}
+                    className="text-sm font-medium text-[var(--accent)] hover:underline"
+                  >
+                    {loadingTrips ? "Loading…" : "My trips"}
+                  </button>
+                  {savedTrips.length > 0 && (
+                    <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] p-2">
+                      {savedTrips.map((t) => (
+                        <li key={t.id}>
+                          <button
+                            type="button"
+                            onClick={() => loadTrip(t.id)}
+                            className="w-full rounded px-2 py-1.5 text-left text-sm hover:bg-[var(--border)]"
+                          >
+                            {(t.payload as PlanResponse)?.trip?.title ?? "Untitled"} · {new Date(t.updated_at).toLocaleDateString()}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </>
+            )}
           </section>
 
-          {/* Output */}
-          <section className="md:col-span-2 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5">
+          {/* Output: suggested itinerary → trip universe */}
+          <section className="md:col-span-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
             {!plan ? (
-              <div className="rounded-2xl border border-neutral-800 bg-neutral-950/30 p-6 text-neutral-300">
+              <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--muted-bg)] p-8 text-center text-[var(--muted)]">
                 <p className="text-sm">
-                  No plan yet. Enter vibes and click <span className="text-neutral-50">Generate itinerary</span>.
+                  No plan yet. Enter vibes and click <span className="font-medium text-[var(--foreground)]">Generate itinerary</span>, then step into your trip universe to refine it.
                 </p>
               </div>
             ) : (
               <div>
+                {tripPhoto?.url && (
+                  <div className="mb-6 overflow-hidden rounded-xl">
+                    <img
+                      src={tripPhoto.url}
+                      alt={tripPhoto.alt}
+                      className="h-48 w-full object-cover"
+                    />
+                    <p className="mt-1 text-right text-[10px] text-[var(--muted)]">
+                      Photo: Unsplash
+                    </p>
+                  </div>
+                )}
                 <h2 className="text-2xl font-semibold">{plan.trip.title}</h2>
-                <p className="mt-2 text-neutral-300">{plan.trip.summary}</p>
+                <p className="mt-2 text-[var(--muted)]">{plan.trip.summary}</p>
 
                 <div className="mt-4 flex flex-wrap gap-2 text-xs">
-                  <span className="rounded-full border border-neutral-800 bg-neutral-950/50 px-3 py-1 text-neutral-200">
+                  <span className="rounded-full border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-1">
                     Region: {plan.trip.recommended_region}
                   </span>
-                  <span className="rounded-full border border-neutral-800 bg-neutral-950/50 px-3 py-1 text-neutral-200">
+                  <span className="rounded-full border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-1">
                     Season: {plan.trip.best_season}
                   </span>
-                  <span className="rounded-full border border-neutral-800 bg-neutral-950/50 px-3 py-1 text-neutral-200">
+                  <span className="rounded-full border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-1">
                     Pace: {plan.trip.pace}
                   </span>
-
                   {plan.trip.vibe_tags?.map((t) => (
                     <span
                       key={t}
-                      className="rounded-full border border-neutral-800 bg-neutral-950/30 px-3 py-1 text-neutral-300"
+                      className="rounded-full border border-[var(--border)] px-3 py-1 text-[var(--muted)]"
                     >
                       #{t}
                     </span>
                   ))}
                 </div>
 
+                <div className="mt-6 border-t border-[var(--border)] pt-6">
+                  <h3 className="text-lg font-semibold text-[var(--accent)]">Your trip universe</h3>
+                  <p className="mt-1 text-sm text-[var(--muted)]">
+                    Elaborate, tweak, and mold your trip below. Drag activities between days and time slots; click to edit.
+                  </p>
+                </div>
+
                 <DndContext
                   sensors={sensors}
                   collisionDetection={closestCenter}
+                  onDragStart={handleDragStart}
                   onDragEnd={handleDragEnd}
+                  accessibility={{
+                    screenReaderInstructions: defaultScreenReaderInstructions,
+                  }}
                 >
-                  <div className="mt-6 space-y-4">
+                  <div className="mt-4 space-y-4">
                     {plan.itinerary?.map((d) => (
                       <div
                         key={d.day}
-                        className="rounded-2xl border border-neutral-800 bg-neutral-950/30 p-4"
+                        className="rounded-2xl border border-[var(--border)] bg-[var(--muted-bg)] p-4"
                       >
                         <div className="mb-3 flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
-                          <h3 className="text-lg font-medium">Day {d.day}</h3>
-                          <span className="text-sm text-neutral-400">
+                          <h4 className="text-lg font-medium">Day {d.day}</h4>
+                          <span className="text-sm text-[var(--muted)]">
                             Base: {d.base_location}
                           </span>
                         </div>
@@ -361,6 +523,19 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
+                  <DragOverlay>
+                    {activeBlock ? (
+                      <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-2 shadow-lg ring-2 ring-[var(--accent)]">
+                        <div className="text-[var(--foreground)]">{activeBlock.title}</div>
+                        {activeBlock.notes ? (
+                          <div className="mt-1 text-xs text-[var(--muted)]">{activeBlock.notes}</div>
+                        ) : null}
+                        <span className="mt-1 inline-block rounded-full border border-[var(--border)] bg-[var(--muted-bg)] px-2 py-0.5 text-[11px] text-[var(--muted)]">
+                          {activeBlock.type}
+                        </span>
+                      </div>
+                    ) : null}
+                  </DragOverlay>
                 </DndContext>
               </div>
             )}
@@ -394,17 +569,17 @@ function TimeBlock({
   return (
     <div
       ref={setNodeRef}
-      className={`rounded-xl border border-neutral-800 bg-neutral-950/40 p-3 transition-colors ${
-        isOver ? "border-neutral-600 bg-neutral-900/60" : ""
+      className={`rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 transition-colors ${
+        isOver ? "border-[var(--accent)] bg-[var(--accent-soft)]" : ""
       }`}
       aria-label={`Day ${day}, ${title}`}
     >
-      <p className="text-sm font-medium text-neutral-100">{title}</p>
+      <p className="text-sm font-medium">{title}</p>
 
       <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
-        <ul className="mt-2 space-y-2 text-sm text-neutral-300">
+        <ul className="mt-2 space-y-2 text-sm text-[var(--muted)]">
           {items.length === 0 ? (
-            <li className="rounded-lg border border-dashed border-neutral-700 py-4 text-center text-neutral-500">
+            <li className="rounded-lg border border-dashed border-[var(--border)] py-4 text-center">
               Drop here
             </li>
           ) : (
@@ -481,13 +656,13 @@ function SortableBlock({
     <li
       ref={setNodeRef}
       style={style}
-      className={`rounded-lg border border-neutral-800 bg-neutral-950/60 p-2 ${
-        isDragging ? "opacity-80 shadow-lg ring-2 ring-neutral-500" : ""
+      className={`rounded-lg border border-[var(--border)] bg-[var(--card)] p-2 ${
+        isDragging ? "opacity-80 shadow-lg ring-2 ring-[var(--accent)]" : ""
       }`}
     >
       <div className="flex items-start gap-2">
         <div
-          className="mt-0.5 shrink-0 cursor-grab touch-none rounded p-0.5 text-neutral-500 hover:bg-neutral-800/50 active:cursor-grabbing"
+          className="mt-0.5 shrink-0 cursor-grab touch-none rounded p-0.5 text-[var(--muted)] hover:bg-[var(--muted-bg)] active:cursor-grabbing"
           {...attributes}
           {...listeners}
           aria-label={`Drag to reorder: ${block.title}`}
@@ -527,7 +702,7 @@ function SortableBlock({
                   setEditingTitle(false);
                 }
               }}
-              className="w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-0.5 text-sm text-neutral-100 outline-none focus:ring-1 focus:ring-neutral-500"
+              className="w-full rounded border border-[var(--border)] bg-[var(--muted-bg)] px-2 py-0.5 text-sm outline-none focus:ring-1 focus:ring-[var(--accent)]"
               autoFocus
               aria-label="Edit activity title"
             />
@@ -535,7 +710,7 @@ function SortableBlock({
             <button
               type="button"
               onClick={() => setEditingTitle(true)}
-              className="w-full text-left text-neutral-100 hover:text-neutral-50 focus:outline-none focus:ring-1 focus:ring-neutral-500 focus:ring-inset rounded"
+              className="w-full rounded text-left focus:outline-none focus:ring-1 focus:ring-[var(--accent)] focus:ring-inset"
             >
               {block.title}
             </button>
@@ -552,7 +727,7 @@ function SortableBlock({
                   setEditingNotes(false);
                 }
               }}
-              className="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-xs text-neutral-300 outline-none focus:ring-1 focus:ring-neutral-500 resize-none"
+              className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--muted-bg)] px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-[var(--accent)] resize-none"
               rows={2}
               autoFocus
               aria-label="Edit activity notes"
@@ -561,7 +736,7 @@ function SortableBlock({
             <button
               type="button"
               onClick={() => setEditingNotes(true)}
-              className={`mt-1 block w-full text-left text-xs text-neutral-400 hover:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-neutral-500 focus:ring-inset rounded ${!block.notes ? "italic text-neutral-500" : ""}`}
+              className={`mt-1 block w-full rounded text-left text-xs focus:outline-none focus:ring-1 focus:ring-[var(--accent)] focus:ring-inset ${!block.notes ? "italic text-[var(--muted)]" : ""}`}
             >
               {block.notes || "Add notes…"}
             </button>
@@ -574,7 +749,7 @@ function SortableBlock({
                 type: e.target.value as Block["type"],
               })
             }
-            className="mt-2 rounded-full border border-neutral-800 bg-neutral-950/50 px-2 py-0.5 text-[11px] text-neutral-300 focus:outline-none focus:ring-1 focus:ring-neutral-500"
+            className="mt-2 rounded-full border border-[var(--border)] bg-[var(--muted-bg)] px-2 py-0.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
             aria-label="Activity type"
           >
             {BLOCK_TYPES.map((t) => (

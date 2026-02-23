@@ -9,15 +9,15 @@ This doc helps you explain the site to others: **what it does** and **how it’s
 ```mermaid
 flowchart LR
   A[Enter vibes + days] --> B[Click Generate]
-  B --> C[See trip title + summary]
-  C --> D[See day-by-day itinerary]
-  D --> E[Morning / Afternoon / Evening blocks]
-  E --> F[Drag blocks to reorder or move]
-  F --> G[Click title/notes to edit inline]
-  G --> H[State updates in browser only]
+  B --> C[See suggested itinerary + hero image]
+  C --> D[Your trip universe: day-by-day blocks]
+  D --> E[Drag blocks between days/slots]
+  E --> F[Edit title, notes, type inline]
+  F --> G[Save trip / Load from My trips]
+  G --> H[Plan cache reduces repeat API calls]
 ```
 
-**In words:** The user types what they’re in the mood for (e.g. “space, solitude, nature, sun”) and how many days. After they click **Generate itinerary**, they get a trip idea (title, summary, region, season, pace) and a day-by-day plan. Each day is split into Morning, Afternoon, and Evening, with activity blocks. They can drag blocks (via the grip handle) to reorder or move between days/slots. They can click the title or notes to edit inline, and change the activity type via a dropdown. All changes update the itinerary state in the browser (no persistence yet).
+**In words:** The user types vibes and days, then clicks **Generate itinerary**. They see a **suggested itinerary** (trip title, summary, optional hero photo from Unsplash, region, season, pace). Below that, **Your trip universe** lets them elaborate, tweak, and mold the trip: drag blocks between days and time slots, click title/notes to edit inline, change activity type. They can **Save this trip** (if Supabase is configured) and **My trips** to load a saved itinerary. Identical generate requests use a **plan cache** to avoid extra OpenAI calls.
 
 ---
 
@@ -27,27 +27,39 @@ flowchart LR
 sequenceDiagram
   participant U as User (browser)
   participant P as app/page.tsx
-  participant API as app/api/plan/route.ts
+  participant PlanAPI as app/api/plan
+  participant TripsAPI as app/api/trips
+  participant PhotoAPI as app/api/photo
+  participant Supabase as Supabase
   participant OAI as OpenAI
+  participant Unsplash as Unsplash
 
   U->>P: Enter vibes, days, click Generate
-  P->>P: setLoading(true), setError(null)
-  P->>API: POST /api/plan { vibes, days }
-  API->>API: Validate OPENAI_API_KEY, body
-  API->>OAI: responses.create(...) with trip prompt + json_object
-  OAI-->>API: Response (trip + itinerary JSON)
-  API->>API: Parse and validate
-  API-->>P: JSON { trip, itinerary }
-  P->>P: setPlan(data), setLoading(false)
-  P->>U: Render trip header + day cards + blocks
-  U->>P: Drag block to new slot
-  P->>P: handleDragEnd → update plan.itinerary immutably
-  U->>P: Click title/notes or change type
-  P->>P: handleBlockChange → update block in plan.itinerary
-  P->>U: Re-render itinerary
+  P->>PlanAPI: POST /api/plan { vibes, days }
+  PlanAPI->>Supabase: Check plan_cache by input hash
+  alt cache hit
+    Supabase-->>PlanAPI: cached payload
+    PlanAPI-->>P: JSON { trip, itinerary }
+  else cache miss
+    PlanAPI->>OAI: responses.create(...)
+    OAI-->>PlanAPI: trip + itinerary JSON
+    PlanAPI->>Supabase: Upsert plan_cache
+    PlanAPI-->>P: JSON { trip, itinerary }
+  end
+  P->>P: setPlan(data)
+  P->>PhotoAPI: GET /api/photo?q=region (optional)
+  PhotoAPI->>Unsplash: search photos
+  Unsplash-->>PhotoAPI: image URL
+  PhotoAPI-->>P: { url, alt }
+  P->>U: Render suggestion + trip universe (hero image, days, blocks)
+  U->>P: Drag / edit / Save / Load
+  P->>TripsAPI: GET /api/trips or POST /api/trips or GET /api/trips/[id]
+  TripsAPI->>Supabase: Read/write trips table
+  Supabase-->>P: list or saved payload
+  P->>U: Update UI (plan, My trips list)
 ```
 
-**In words:** The React page sends a single POST with the user’s vibes and day count. The API route calls OpenAI with a fixed schema (trip metadata + itinerary with blocks). The API returns that JSON; the client stores it in state and renders the trip and days. When the user drags a block or edits it (title, notes, type), the client updates `plan.itinerary` immutably and re-renders. No database yet — everything lives in memory on the client.
+**In words:** Generate hits `/api/plan`, which checks Supabase `plan_cache` by input hash; on miss it calls OpenAI and caches the result. The client optionally fetches a hero image from `/api/photo` (Unsplash). Save/load uses `/api/trips` (GET list, POST save, GET by id) backed by Supabase `trips` table. Drag and inline edits update client state; Save persists the current plan.
 
 ---
 
@@ -57,24 +69,39 @@ sequenceDiagram
 flowchart TB
   subgraph Client["Browser (React)"]
     Page["app/page.tsx"]
-    Page --> State["State: vibes, days, plan, loading, error"]
+    Page --> State["State: vibes, days, plan, savedTrips, tripPhoto, dbAvailable"]
     Page --> DND["DndContext (@dnd-kit)"]
-    Page --> UI["UI: form + trip header + day cards"]
+    Page --> UI["UI: form + suggested itinerary + Your trip universe"]
+    UI --> Hero["Hero image (Unsplash) when plan exists"]
     UI --> TimeBlock["TimeBlock: droppable zone + SortableContext"]
     TimeBlock --> SortableBlock["SortableBlock: draggable + editable (title, notes, type)"]
+    UI --> SaveLoad["Save this trip / My trips"]
     DND --> TimeBlock
   end
 
-  subgraph Server["Next.js server"]
-    Route["app/api/plan/route.ts"]
-    Route --> OpenAI["OpenAI API"]
+  subgraph Server["Next.js API"]
+    PlanRoute["app/api/plan/route.ts"]
+    TripsRoute["app/api/trips/route.ts"]
+    TripIdRoute["app/api/trips/[id]/route.ts"]
+    PhotoRoute["app/api/photo/route.ts"]
   end
 
-  Page -->|"POST { vibes, days }"| Route
-  Route -->|"JSON { trip, itinerary }"| Page
+  PlanRoute --> OpenAI["OpenAI API"]
+  PlanRoute --> Supabase["Supabase (plan_cache)"]
+  TripsRoute --> Supabase["Supabase (trips)"]
+  TripIdRoute --> Supabase["Supabase (trips)"]
+  PhotoRoute --> Unsplash["Unsplash API"]
+
+  Page -->|"POST /api/plan"| PlanRoute
+  Page -->|"GET/POST /api/trips"| TripsRoute
+  Page -->|"GET /api/trips/[id]"| TripIdRoute
+  Page -->|"GET /api/photo?q="| PhotoRoute
+  PlanRoute -->|"JSON"| Page
+  TripsRoute -->|"list / saved"| Page
+  PhotoRoute -->|"url, alt"| Page
 ```
 
-**In words:** The only page is `app/page.tsx`. It holds all state and wraps the itinerary in `DndContext` (@dnd-kit). Each time slot (Morning, Afternoon, Evening) is a droppable zone with id `day-${day}-${time}`; each activity is a sortable, editable block (grip handle for drag; click title/notes to edit; type dropdown). On drag end or block edit, the client updates `plan.itinerary` immutably. The only API route is `app/api/plan/route.ts`; it talks to OpenAI and returns the plan.
+**In words:** `app/page.tsx` holds all state and renders the form, suggested itinerary (with optional Unsplash hero), and **Your trip universe** (DndContext + day cards + sortable blocks). Drag-and-drop uses **DragOverlay** for a visible drag preview and **defaultScreenReaderInstructions** so keyboard and screen-reader users can reorder and move blocks. Save/Load and My trips call `/api/trips`. Plan generation uses `/api/plan` (with optional Supabase plan cache). Trip images come from `/api/photo` (Unsplash). See `docs/supabase-schema.sql` for DB tables.
 
 ---
 
@@ -97,7 +124,7 @@ flowchart LR
   B --> BL[Block: id, time, title, type, notes]
 ```
 
-**In words:** A plan has two top-level parts: **trip** (metadata and vibe) and **itinerary** (list of days). Each day has a day number, base location, and **blocks**. Each block has an id (e.g. `d1-m-1`), a time slot (morning/afternoon/evening), title, type (food, nature, culture, etc.), and notes. Drag-and-drop reorders and moves blocks; inline editing updates title, notes, and type. All changes update client state (and will be persisted when save/load is added).
+**In words:** A plan has **trip** (metadata) and **itinerary** (days with blocks). Saved trips in Supabase store the full plan as `payload` (same shape). Plan cache stores plans keyed by hash(vibes, days) to reduce OpenAI calls. Drag-and-drop and inline edits update client state; **Save this trip** persists to Supabase.
 
 ---
 

@@ -6,7 +6,7 @@
 | Language  | TypeScript |
 | Styling   | Tailwind CSS |
 | AI        | OpenAI API (Responses API, `json_object` for itinerary) |
-| DnD (planned) | @dnd-kit (core + sortable) |
+| DnD | @dnd-kit (core + sortable + DragOverlay, screen reader instructions) |
 | Version control | Git |
 | Editor    | Cursor |
 

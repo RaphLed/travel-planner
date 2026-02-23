@@ -1,6 +1,6 @@
 # Travel Planner — Cursor context
 
-**Canonical project context.** (Also maintained as `cursos-context.md`.)
+**Single source of truth for project context.** (Do not create a duplicate file with a similar name.)
 
 This is a Next.js 15 App Router project.
 
@@ -17,18 +17,22 @@ Build an AI-powered travel planning platform with:
 
 ## Stack
 
-- Next.js App Router
-- TypeScript
-- Tailwind CSS
-- OpenAI Responses API
-- Local development currently
+- Next.js App Router, TypeScript, Tailwind CSS
+- OpenAI Responses API (itinerary generation)
+- Supabase (trips table: save/load; plan_cache: reduce API calls)
+- Unsplash (trip/destination images via `app/api/photo/route.ts`)
+- @dnd-kit (drag-and-drop itinerary)
 
 ## Key paths
 
-| Role   | Path (logical; app lives in `app/`, not `src/app/`) |
-|--------|------------------------------------------------------|
-| API    | `app/api/plan/route.ts`                              |
-| UI     | `app/page.tsx`                                      |
+| Role   | Path |
+|--------|------|
+| UI     | `app/page.tsx` |
+| Plan API | `app/api/plan/route.ts` (OpenAI + optional plan_cache) |
+| Trips API | `app/api/trips/route.ts`, `app/api/trips/[id]/route.ts` |
+| Photo API | `app/api/photo/route.ts` (Unsplash) |
+| DB schema | `docs/supabase-schema.sql` |
+| Env example | `.env.example` |
 
 ## Current schema
 
@@ -56,9 +60,19 @@ Build an AI-powered travel planning platform with:
 - Accessibility compliance
 - Professional-grade UX
 
-## Next step: save/load trips
+## Implemented
 
-Drag-and-drop itinerary and editable activity blocks are implemented. Each activity block can be dragged between days and time slots (Morning/Afternoon/Evening); title, notes, and type are editable inline. State updates in the browser only.
+- Drag-and-drop itinerary (reorder/move blocks between days and time slots; DragOverlay + defaultScreenReaderInstructions for a11y)
+- Editable activity blocks (title, notes, type)
+- Save/load trips (Supabase `trips` table; My trips list)
+- Plan cache (Supabase `plan_cache`; same vibes+days returns cached plan, fewer OpenAI calls)
+- Trip universe: suggested itinerary → “Your trip universe” section to elaborate/tweak with drag-and-drop
+- Visuals: editorial palette (CSS variables), hero image from Unsplash per trip
+- Single context file: `docs/cursor-context.md` only (duplicate `cursos-context.md` removed)
 
-Next: save/load trips (persistence). See `docs/how-it-works.md` for data flow and `docs/vision-and-quality.md` for design bar.
+## Next steps (priority)
+
+- Multi-trip browsing / dashboard
+- Auth (e.g. Supabase Auth) to scope trips to users
+- Monetization hooks (e.g. sponsored slots, affiliate links) — see `docs/vision-and-quality.md`
 

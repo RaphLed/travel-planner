@@ -1,7 +1,34 @@
+import { getSupabase } from "@/lib/supabase";
+import { createHash } from "crypto";
 import OpenAI from "openai";
+
+function inputHash(vibes: string, days: number): string {
+  return createHash("sha256").update(`${vibes}|${days}`).digest("hex");
+}
 
 export async function POST(req: Request) {
   try {
+    const body = await req.json().catch(() => ({}));
+    const vibes = typeof body.vibes === "string" ? body.vibes : "sun, nature, solitude";
+    const days = typeof body.days === "number" ? body.days : 5;
+    const hash = inputHash(vibes, days);
+
+    // Return cached plan if available (reduces API calls)
+    const supabase = getSupabase();
+    if (supabase) {
+      const { data: cached } = await supabase
+        .from("plan_cache")
+        .select("payload")
+        .eq("input_hash", hash)
+        .single();
+      if (cached?.payload && typeof cached.payload === "object") {
+        return new Response(JSON.stringify(cached.payload), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+    }
+
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       return new Response(JSON.stringify({ error: "Missing OPENAI_API_KEY" }), {
@@ -11,10 +38,6 @@ export async function POST(req: Request) {
     }
 
     const client = new OpenAI({ apiKey });
-
-    const body = await req.json().catch(() => ({}));
-    const vibes = typeof body.vibes === "string" ? body.vibes : "sun, nature, solitude";
-    const days = typeof body.days === "number" ? body.days : 5;
 
     const response = await client.responses.create({
       model: "gpt-4o-mini",
@@ -83,6 +106,20 @@ Rules:
     }
 
     const data = JSON.parse(raw) as { trip: unknown; itinerary: unknown };
+
+    // Store in cache for future identical requests
+    if (supabase) {
+      await supabase.from("plan_cache").upsert(
+        {
+          input_hash: hash,
+          vibes,
+          days,
+          payload: data,
+        },
+        { onConflict: "input_hash" }
+      );
+    }
+
     return new Response(JSON.stringify(data), {
       status: 200,
       headers: { "Content-Type": "application/json" },
