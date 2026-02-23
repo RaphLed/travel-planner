@@ -56,11 +56,9 @@ Build an AI-powered travel planning platform with:
 - Accessibility compliance
 - Professional-grade UX
 
-## Next step: drag-and-drop itinerary
+## Next step: editable activity blocks
 
-1. **Install** `@dnd-kit/core`, `@dnd-kit/sortable` (and optionally `@dnd-kit/utilities`).
-2. **Wrap** the itinerary output in `DndContext`; use droppable ids like `day-${day}-${time}` (e.g. `day-1-morning`).
-3. **Make each block** a draggable/sortable item (e.g. `useSortable` with block `id`); each time slot (Morning/Afternoon/Evening) is a `SortableContext` + droppable zone.
-4. **On drag end:** resolve `active.id` (block id) and `over` (target zone or item); update `plan.itinerary` immutably (move block to new day/time and index); keep block `id`, update `time` as needed.
-5. **Accessibility:** rely on dnd-kit’s keyboard and screen-reader support; ensure droppable zones have clear labels (e.g. "Day 1, Morning").
-6. **Scope:** client-only state updates; no persistence or API for order yet. See `docs/how-it-works.md` for data flow and `docs/vision-and-quality.md` for design bar.
+Drag-and-drop itinerary is implemented. Each activity block can be dragged between days and time slots (Morning/Afternoon/Evening); state updates in the browser only.
+
+Next: make activity blocks editable (inline edit for title, notes, type). See `docs/how-it-works.md` for data flow and `docs/vision-and-quality.md` for design bar.
+
