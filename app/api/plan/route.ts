@@ -4,8 +4,11 @@ import {
   PRICINESS_LABELS,
   type TripPreferences,
 } from "@/lib/trip-preferences";
+import type { PlanResponse } from "@/lib/types";
 import { createHash } from "crypto";
 import OpenAI from "openai";
+
+const NUM_ALTERNATIVES = 3;
 
 function inputHash(prefs: TripPreferences): string {
   return createHash("sha256").update(JSON.stringify(prefs)).digest("hex");
@@ -16,7 +19,7 @@ function buildPrompt(prefs: TripPreferences): string {
   const vibes = prefs.vibes;
   const priceLabel = PRICINESS_LABELS[Math.min(prefs.priciness - 1, 4)] ?? "Moderate";
   const parts: string[] = [
-    `Create a ${days}-day trip idea.`,
+    `Create ${NUM_ALTERNATIVES} different ${days}-day trip ideas. Consider destinations worldwide.`,
     `Vibes/keywords: ${vibes}.`,
     `Budget level: ${priceLabel} (${prefs.priciness}/5).`,
   ];
@@ -45,10 +48,13 @@ export async function POST(req: Request) {
         .eq("input_hash", hash)
         .single();
       if (cached?.payload && typeof cached.payload === "object") {
-        return new Response(JSON.stringify(cached.payload), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
+        const c = cached.payload as { alternatives?: PlanResponse[] };
+        if (Array.isArray(c.alternatives) && c.alternatives.length > 0) {
+          return new Response(JSON.stringify(cached.payload), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
       }
     }
 
@@ -70,7 +76,8 @@ export async function POST(req: Request) {
         {
           role: "system",
           content:
-            "Return ONLY valid JSON. No markdown. No code fences. Must match the schema.",
+            "Return ONLY valid JSON. No markdown. No code fences. Must match the schema. You MUST output exactly " + NUM_ALTERNATIVES + " distinct trip alternatives. " +
+            "Recommend real, specific destinations and activities worldwide. Be actionable and concrete: name real places, landmarks, neighbourhoods, and proven itineraries. Avoid generic or high-level fluff.",
         },
         {
           role: "user",
@@ -79,25 +86,29 @@ export async function POST(req: Request) {
 Return JSON with this exact structure (no markdown, no code fences):
 
 {
-  "trip": {
-    "title": "string",
-    "summary": "string",
-    "vibe_tags": ["string"],
-    "recommended_region": "string",
-    "best_season": "string",
-    "pace": "slow|moderate|fast"
-  },
-  "itinerary": [
+  "alternatives": [
     {
-      "day": 1,
-      "base_location": "string",
-      "blocks": [
+      "trip": {
+        "title": "string",
+        "summary": "string",
+        "vibe_tags": ["string"],
+        "recommended_region": "string",
+        "best_season": "string",
+        "pace": "slow|moderate|fast"
+      },
+      "itinerary": [
         {
-          "id": "d1-m-1",
-          "time": "morning|afternoon|evening",
-          "title": "string",
-          "type": "food|nature|culture|nightlife|relax|logistics",
-          "notes": "string"
+          "day": 1,
+          "base_location": "string",
+          "blocks": [
+            {
+              "id": "d1-m-1",
+              "time": "morning|afternoon|evening",
+              "title": "string",
+              "type": "food|nature|culture|nightlife|relax|logistics",
+              "notes": "string"
+            }
+          ]
         }
       ]
     }
@@ -105,11 +116,11 @@ Return JSON with this exact structure (no markdown, no code fences):
 }
 
 Rules:
-- You MUST include exactly ${prefs.days} day objects in "itinerary".
-- Each "blocks" item MUST have a unique id. Use the format: d{day}-{m|a|e}-{index}, e.g. d3-a-2.
-- Each day should have 2–4 blocks per time period (morning/afternoon/evening) unless the vibe implies slower pace.
-- "base_location" should be a realistic place (city/town/region). Respect origin and max travel time when suggesting region.
-- "notes" should be short and practical (1–2 sentences). Respect budget level, constraints, and theme in your suggestions.`,
+- You MUST include exactly ${NUM_ALTERNATIVES} objects in "alternatives". Each alternative must be a COMPLETELY DIFFERENT trip (different region/country or theme). Consider worldwide options.
+- Be specific and actionable: use real place names, real activities, and proven trip structures. No vague or generic recommendations.
+- Each alternative MUST have "trip" and "itinerary". Each itinerary MUST have exactly ${prefs.days} day objects.
+- Block ids must be unique across the whole response. Use format: d{day}-{m|a|e}-{index}-{altIndex} e.g. d1-m-1-0 for first alternative, d1-m-1-1 for second.
+- Each day should have 2–4 blocks per time period. "base_location" should be a real town/neighbourhood. Respect origin, max travel time, budget, constraints, and theme.`,
         },
       ],
     });
@@ -129,7 +140,16 @@ Rules:
       );
     }
 
-    const data = JSON.parse(raw) as { trip: unknown; itinerary: unknown };
+    const parsed = JSON.parse(raw) as { alternatives?: unknown[] };
+    const alternatives = Array.isArray(parsed.alternatives) ? parsed.alternatives : [];
+    if (alternatives.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "No alternatives returned" }),
+        { status: 502, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    const data = { alternatives: alternatives.slice(0, NUM_ALTERNATIVES) as PlanResponse[] };
 
     if (supabase) {
       await supabase.from("plan_cache").upsert(

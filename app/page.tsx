@@ -138,16 +138,285 @@ const COPILOT_SUGGESTIONS = [
   "Family-friendly only",
 ];
 
+type Step = "params" | "suggestions" | "universe";
+
+function ParamsPage({
+  prefs,
+  setPrefs,
+  canGenerate,
+  loading,
+  error,
+  generate,
+}: {
+  prefs: TripPreferences;
+  setPrefs: React.Dispatch<React.SetStateAction<TripPreferences>>;
+  canGenerate: boolean;
+  loading: boolean;
+  error: string | null;
+  generate: () => void;
+}) {
+  return (
+    <div className="hero-with-mesh -mx-6 -mt-6 rounded-2xl border border-[var(--card-border)] p-8 sm:p-10 md:p-12">
+      <h2 className="text-center text-3xl font-bold tracking-tight text-[var(--foreground)] sm:text-4xl">
+        Design your trip
+      </h2>
+      <p className="mt-3 text-center text-[var(--muted)]">
+        Set your parameters. We’ll suggest three distinct trip ideas worldwide.
+      </p>
+
+      <div className="mx-auto mt-10 max-w-2xl space-y-8">
+        <div>
+          <label className="block text-sm font-medium text-[var(--muted)]" htmlFor="vibes">
+            Vibes / keywords
+          </label>
+          <textarea
+            id="vibes"
+            rows={3}
+            value={prefs.vibes}
+            onChange={(e) => setPrefs((p) => ({ ...p, vibes: e.target.value }))}
+            placeholder="e.g. warm, sea, street food, architecture, calm"
+            className="mt-2 w-full rounded-2xl border-2 border-[var(--border)] bg-[var(--card)]/80 px-4 py-3.5 text-base outline-none transition-colors focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--glow)]"
+          />
+        </div>
+
+        <div className="grid gap-8 sm:grid-cols-2">
+          <div>
+            <label className="block text-sm font-medium text-[var(--muted)]">
+              Duration: <span className="text-[var(--foreground)]">{prefs.days}</span> days
+            </label>
+            <input
+              type="range"
+              min={1}
+              max={60}
+              value={prefs.days}
+              onChange={(e) => setPrefs((p) => ({ ...p, days: Number(e.target.value) }))}
+              className="mt-2 h-4 w-full cursor-pointer appearance-none rounded-full bg-[var(--muted-bg)] [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--accent)] [&::-webkit-slider-thumb]:shadow-lg"
+              style={{ accentColor: "var(--accent)" }}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-[var(--muted)]">
+              Budget: <span className="text-[var(--foreground)]">{PRICINESS_LABELS[prefs.priciness - 1]}</span>
+            </label>
+            <input
+              type="range"
+              min={1}
+              max={5}
+              value={prefs.priciness}
+              onChange={(e) => setPrefs((p) => ({ ...p, priciness: Number(e.target.value) }))}
+              className="mt-2 h-4 w-full cursor-pointer appearance-none rounded-full bg-[var(--muted-bg)] [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--accent)] [&::-webkit-slider-thumb]:shadow-lg"
+              style={{ accentColor: "var(--accent)" }}
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-[var(--muted)]">
+            Max one-way travel: <span className="text-[var(--foreground)]">{prefs.maxTravelTimeHours}h</span>
+          </label>
+          <input
+            type="range"
+            min={1}
+            max={24}
+            value={prefs.maxTravelTimeHours}
+            onChange={(e) => setPrefs((p) => ({ ...p, maxTravelTimeHours: Number(e.target.value) }))}
+            className="mt-2 h-4 w-full cursor-pointer appearance-none rounded-full bg-[var(--muted-bg)] [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--accent)] [&::-webkit-slider-thumb]:shadow-lg"
+            style={{ accentColor: "var(--accent)" }}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-[var(--muted)]" htmlFor="origin">
+            Origin (city or country)
+          </label>
+          <input
+            id="origin"
+            type="text"
+            value={prefs.origin}
+            onChange={(e) => setPrefs((p) => ({ ...p, origin: e.target.value }))}
+            placeholder="e.g. Paris, London"
+            className="mt-2 w-full rounded-2xl border-2 border-[var(--border)] bg-[var(--card)]/80 px-4 py-3 text-base outline-none transition-colors focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--glow)]"
+          />
+        </div>
+
+        <div className="grid gap-6 sm:grid-cols-2">
+          <div>
+            <label className="block text-sm font-medium text-[var(--muted)]">Transport</label>
+            <select
+              value={prefs.transportation}
+              onChange={(e) => setPrefs((p) => ({ ...p, transportation: e.target.value }))}
+              className="mt-2 w-full rounded-2xl border-2 border-[var(--border)] bg-[var(--card)]/80 px-4 py-3 text-base outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--glow)]"
+            >
+              {TRANSPORT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-[var(--muted)]">Theme</label>
+            <select
+              value={prefs.theme}
+              onChange={(e) => setPrefs((p) => ({ ...p, theme: e.target.value }))}
+              className="mt-2 w-full rounded-2xl border-2 border-[var(--border)] bg-[var(--card)]/80 px-4 py-3 text-base outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--glow)]"
+            >
+              {THEME_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-[var(--muted)]">Weather</label>
+          <select
+            value={prefs.weather}
+            onChange={(e) => setPrefs((p) => ({ ...p, weather: e.target.value }))}
+            className="mt-2 w-full rounded-2xl border-2 border-[var(--border)] bg-[var(--card)]/80 px-4 py-3 text-base outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--glow)]"
+          >
+            {WEATHER_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-[var(--muted)]">Emphasis</label>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {EMPHASIS_OPTIONS.map((em) => {
+              const on = prefs.emphasis.includes(em);
+              return (
+                <button
+                  key={em}
+                  type="button"
+                  onClick={() => setPrefs((p) => ({
+                    ...p,
+                    emphasis: on ? p.emphasis.filter((e) => e !== em) : [...p.emphasis, em],
+                  }))}
+                  className={`rounded-full px-4 py-2 text-sm font-medium transition-all ${
+                    on ? "bg-[var(--accent)] text-white shadow-lg shadow-[var(--accent)]/25" : "border-2 border-[var(--border)] bg-[var(--card)]/60 text-[var(--muted)] hover:border-[var(--accent)]/50 hover:text-[var(--foreground)]"
+                  }`}
+                >
+                  {em}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-[var(--muted)]" htmlFor="constraints">
+            Constraints (e.g. wheelchair, dietary)
+          </label>
+          <input
+            id="constraints"
+            type="text"
+            value={prefs.constraints}
+            onChange={(e) => setPrefs((p) => ({ ...p, constraints: e.target.value }))}
+            placeholder="Optional"
+            className="mt-2 w-full rounded-2xl border-2 border-[var(--border)] bg-[var(--card)]/80 px-4 py-3 text-base outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--glow)]"
+          />
+        </div>
+
+        {error && (
+          <p className="rounded-2xl border-2 border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+            {error}
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={generate}
+          disabled={!canGenerate || loading}
+          className="w-full rounded-2xl bg-[var(--accent)] py-4 text-lg font-semibold text-white shadow-xl shadow-[var(--accent)]/30 transition-all hover:bg-[var(--accent-hover)] hover:shadow-[var(--accent)]/40 disabled:opacity-50 disabled:shadow-none"
+          aria-busy={loading}
+        >
+          {loading ? "Finding your trips…" : "Find my trips"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CinematicOverlay() {
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[var(--background)]/95 backdrop-blur-md"
+      aria-hidden
+    >
+      <div className="animate-pulse text-xl font-semibold text-[var(--accent)]">Entering trip universe…</div>
+      <div className="mt-4 h-1 w-48 overflow-hidden rounded-full bg-[var(--muted-bg)]">
+        <div className="h-full w-full origin-left animate-[shimmer_1.4s_ease-in-out] rounded-full bg-[var(--accent)]" />
+      </div>
+    </div>
+  );
+}
+
+function SuggestionCard({
+  alternative,
+  onSelect,
+}: {
+  alternative: PlanResponse;
+  onSelect: () => void;
+}) {
+  const [img, setImg] = useState<{ url: string; alt: string } | null>(null);
+  const region = alternative.trip.recommended_region || alternative.trip.title || "travel";
+  useEffect(() => {
+    fetch(`/api/photo?q=${encodeURIComponent(region)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { url?: string; alt?: string } | null) => {
+        if (d?.url) setImg({ url: d.url, alt: d.alt ?? region });
+      })
+      .catch(() => {});
+  }, [region]);
+  return (
+    <article className="suggestion-card flex flex-col overflow-hidden rounded-2xl">
+      <div className="relative h-40 w-full shrink-0 overflow-hidden bg-[var(--muted-bg)]">
+        {img?.url ? (
+          <img src={img.url} alt={img.alt} className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full items-center justify-center text-[var(--muted)]">Loading…</div>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-[var(--card)] via-transparent to-transparent opacity-80" />
+        <div className="absolute bottom-3 left-3 right-3">
+          <h3 className="text-lg font-semibold text-white drop-shadow-md">{alternative.trip.title}</h3>
+          <p className="mt-0.5 text-xs text-white/90 drop-shadow">{alternative.trip.recommended_region}</p>
+        </div>
+      </div>
+      <div className="flex flex-1 flex-col p-4">
+        <p className="line-clamp-2 text-sm text-[var(--muted)]">{alternative.trip.summary}</p>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {alternative.trip.vibe_tags?.slice(0, 4).map((t) => (
+            <span key={t} className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[10px] font-medium text-[var(--accent)]">
+              #{t}
+            </span>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-[var(--muted)]">{alternative.trip.best_season} · {alternative.trip.pace}</p>
+        <button
+          type="button"
+          onClick={onSelect}
+          className="mt-4 w-full rounded-xl bg-[var(--accent)] py-3 text-sm font-medium text-white shadow-lg shadow-[var(--accent)]/25 transition-all hover:bg-[var(--accent-hover)] hover:shadow-[var(--accent)]/30"
+        >
+          Enter trip universe
+        </button>
+      </div>
+    </article>
+  );
+}
+
 export default function Home() {
   const [prefs, setPrefs] = useState<TripPreferences>({
     ...DEFAULT_PREFERENCES,
     vibes: "space, solitude, nature, sun",
     days: 7,
   });
-  const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState<Step>("params");
+  const [suggestions, setSuggestions] = useState<PlanResponse[] | null>(null);
   const [plan, setPlan] = useState<PlanResponse | null>(null);
+  const [universeTransition, setUniverseTransition] = useState<"idle" | "playing" | "done">("idle");
+  const [selectedForUniverse, setSelectedForUniverse] = useState<PlanResponse | null>(null);
   const [savedTrips, setSavedTrips] = useState<SavedTrip[]>([]);
   const [saving, setSaving] = useState(false);
   const [loadingTrips, setLoadingTrips] = useState(false);
@@ -165,6 +434,17 @@ export default function Home() {
     if (!plan?.itinerary || !activeDragId) return null;
     return findBlockAndSource(plan.itinerary, activeDragId)?.block ?? null;
   }, [plan?.itinerary, activeDragId]);
+
+  useEffect(() => {
+    if (universeTransition !== "playing" || !selectedForUniverse) return;
+    const t = setTimeout(() => {
+      setPlan(selectedForUniverse);
+      setStep("universe");
+      setUniverseTransition("done");
+      setSelectedForUniverse(null);
+    }, 1400);
+    return () => clearTimeout(t);
+  }, [universeTransition, selectedForUniverse]);
 
   useEffect(() => {
     if (!plan?.trip) {
@@ -225,13 +505,32 @@ export default function Home() {
         throw new Error(text || `Request failed: ${res.status}`);
       }
 
-      const data = (await res.json()) as PlanResponse;
-      setPlan(data);
+      const data = (await res.json()) as { alternatives?: PlanResponse[] };
+      const list = Array.isArray(data.alternatives) ? data.alternatives : [];
+      setSuggestions(list);
+      setPlan(null);
+      setStep("suggestions");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
       setLoading(false);
     }
+  }
+
+  function selectTrip(alternative: PlanResponse) {
+    setSelectedForUniverse(alternative);
+    setUniverseTransition("playing");
+  }
+
+  function backToSuggestions() {
+    setPlan(null);
+    setStep("suggestions");
+  }
+
+  function goToParams() {
+    setStep("params");
+    setSuggestions(null);
+    setPlan(null);
   }
 
   async function sendCopilotMessage(message: string) {
@@ -287,7 +586,9 @@ export default function Home() {
       const data = (await res.json()) as SavedTrip;
       const payload = data.payload as PlanResponse;
       if (payload?.trip && Array.isArray(payload?.itinerary)) {
+        setSuggestions(null);
         setPlan(payload);
+        setStep("universe");
       } else {
         throw new Error("Invalid trip data");
       }
@@ -353,11 +654,12 @@ export default function Home() {
   );
 
   return (
-    <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
+    <main className="min-h-screen text-[var(--foreground)]">
+      {universeTransition === "playing" && <CinematicOverlay />}
       {plan && copilotOpen && (
-        <div className="fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-[var(--border)] bg-[var(--card)] shadow-xl md:w-96">
-          <div className="flex items-center justify-between border-b border-[var(--border)] p-3">
-            <h3 className="font-semibold">AI Copilot</h3>
+        <div className="fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-[var(--border)] bg-[var(--card)]/95 shadow-2xl backdrop-blur-sm md:w-96">
+          <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--accent-soft)]/30 px-4 py-3">
+            <h3 className="font-semibold text-[var(--accent)]">AI Copilot</h3>
             <button
               type="button"
               onClick={() => setCopilotOpen(false)}
@@ -367,14 +669,14 @@ export default function Home() {
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
             </button>
           </div>
-          <div className="flex flex-wrap gap-1.5 border-b border-[var(--border)] p-2">
+          <div className="flex flex-wrap gap-1.5 border-b border-[var(--border)] bg-[var(--muted-bg)]/30 p-2">
             {COPILOT_SUGGESTIONS.map((s) => (
               <button
                 key={s}
                 type="button"
                 onClick={() => sendCopilotMessage(s)}
                 disabled={copilotLoading}
-                className="rounded-full border border-[var(--border)] bg-[var(--muted-bg)] px-2.5 py-1 text-xs hover:bg-[var(--border)] disabled:opacity-50"
+                className="rounded-full border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs transition-colors hover:border-[var(--accent)]/40 hover:bg-[var(--accent-soft)]/50 hover:text-[var(--accent)] disabled:opacity-50"
               >
                 {s}
               </button>
@@ -387,17 +689,17 @@ export default function Home() {
             {copilotMessages.map((msg, i) => (
               <div
                 key={i}
-                className={`rounded-lg px-3 py-2 text-sm ${msg.role === "user" ? "ml-4 bg-[var(--accent)]/20" : "mr-4 bg-[var(--muted-bg)]"}`}
+                className={`rounded-xl px-3 py-2.5 text-sm ${msg.role === "user" ? "ml-4 bg-[var(--accent)]/15 text-[var(--foreground)]" : "mr-4 bg-[var(--muted-bg)]"}`}
               >
                 {msg.content}
               </div>
             ))}
             {copilotLoading && (
-              <div className="rounded-lg bg-[var(--muted-bg)] px-3 py-2 text-sm text-[var(--muted)]">Thinking…</div>
+              <div className="rounded-xl bg-[var(--muted-bg)] px-3 py-2.5 text-sm text-[var(--muted)]">Thinking…</div>
             )}
           </div>
           <form
-            className="border-t border-[var(--border)] p-2"
+            className="border-t border-[var(--border)] bg-[var(--muted-bg)]/30 p-3"
             onSubmit={(e) => { e.preventDefault(); sendCopilotMessage(copilotInput); }}
           >
             <div className="flex gap-2">
@@ -406,13 +708,13 @@ export default function Home() {
                 value={copilotInput}
                 onChange={(e) => setCopilotInput(e.target.value)}
                 placeholder="Ask for changes…"
-                className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--glow)]"
                 disabled={copilotLoading}
               />
               <button
                 type="submit"
                 disabled={copilotLoading || !copilotInput.trim()}
-                className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                className="rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-medium text-white shadow-md shadow-[var(--accent)]/20 disabled:opacity-50"
               >
                 Send
               </button>
@@ -421,183 +723,75 @@ export default function Home() {
         </div>
       )}
       <div className="mx-auto max-w-6xl px-6 py-10">
-        <header className="mb-8">
-          <h1 className="text-3xl font-semibold tracking-tight">Travel Planner</h1>
-          <p className="mt-2 text-[var(--muted)]">
+        <header className="mb-10">
+          <h1 className="bg-gradient-to-r from-[var(--foreground)] to-[var(--muted)] bg-clip-text text-3xl font-semibold tracking-tight text-transparent sm:text-4xl">
+            Travel Planner
+          </h1>
+          <p className="mt-3 text-[var(--muted)]">
             Your vibes → AI itinerary → your trip universe. Elaborate, tweak, and save.
           </p>
         </header>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          {/* Inputs */}
-          <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
-            <h2 className="text-lg font-medium">Trip input</h2>
+        {step === "params" && (
+          <ParamsPage
+            prefs={prefs}
+            setPrefs={setPrefs}
+            canGenerate={canGenerate}
+            loading={loading}
+            error={error}
+            generate={generate}
+          />
+        )}
 
-            <label className="mt-4 block text-sm text-[var(--muted)]" htmlFor="vibes">
-              Vibes / keywords
-            </label>
-            <textarea
-              id="vibes"
-              className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--muted-bg)] p-3 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]"
-              rows={3}
-              value={prefs.vibes}
-              onChange={(e) => setPrefs((p) => ({ ...p, vibes: e.target.value }))}
-              placeholder="e.g. warm, sea, street food, architecture, calm"
-            />
-
-            <label className="mt-4 block text-sm text-[var(--muted)]" htmlFor="days">
-              Duration (days)
-            </label>
-            <input
-              id="days"
-              type="number"
-              min={1}
-              max={60}
-              value={prefs.days}
-              onChange={(e) => setPrefs((p) => ({ ...p, days: Number(e.target.value) || 1 }))}
-              className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--muted-bg)] p-3 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]"
-            />
-
+        {step === "suggestions" && (
+          <div>
+            {(!suggestions || suggestions.length === 0) ? (
+              <div className="hero-with-mesh rounded-2xl border border-[var(--card-border)] p-10 text-center">
+                <p className="text-[var(--muted)]">No trip ideas yet.</p>
+                <button
+                  type="button"
+                  onClick={goToParams}
+                  className="mt-4 rounded-xl bg-[var(--accent)] px-6 py-2.5 text-sm font-medium text-white shadow-lg shadow-[var(--accent)]/25 hover:bg-[var(--accent-hover)]"
+                >
+                  Set parameters & find trips
+                </button>
+              </div>
+            ) : (
+              <>
             <button
               type="button"
-              onClick={() => setShowMoreOptions((v) => !v)}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-sm text-[var(--muted)] hover:bg-[var(--border)]"
+              onClick={goToParams}
+              className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--muted-bg)]/60 px-4 py-2 text-sm font-medium text-[var(--muted)] transition-colors hover:border-[var(--accent)]/40 hover:bg-[var(--accent-soft)]/40 hover:text-[var(--foreground)]"
             >
-              {showMoreOptions ? "Hide extra options" : "Add more detail"}
+              ← Change parameters
             </button>
-
-            {showMoreOptions && (
-              <div className="mt-4 space-y-4 border-t border-[var(--border)] pt-4">
-                <div>
-                  <label className="block text-sm text-[var(--muted)]">Priciness</label>
-                  <div className="mt-1 flex items-center gap-2">
-                    <input
-                      type="range"
-                      min={1}
-                      max={5}
-                      value={prefs.priciness}
-                      onChange={(e) => setPrefs((p) => ({ ...p, priciness: Number(e.target.value) }))}
-                      className="h-2 flex-1 rounded-full accent-[var(--accent)]"
-                    />
-                    <span className="w-16 text-xs text-[var(--muted)]">{PRICINESS_LABELS[prefs.priciness - 1]}</span>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm text-[var(--muted)]" htmlFor="origin">Origin (city/country)</label>
-                  <input
-                    id="origin"
-                    type="text"
-                    value={prefs.origin}
-                    onChange={(e) => setPrefs((p) => ({ ...p, origin: e.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-sm"
-                    placeholder="e.g. Paris, France"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-[var(--muted)]">Max travel time (hours)</label>
-                  <input
-                    type="range"
-                    min={1}
-                    max={24}
-                    value={prefs.maxTravelTimeHours}
-                    onChange={(e) => setPrefs((p) => ({ ...p, maxTravelTimeHours: Number(e.target.value) }))}
-                    className="mt-1 h-2 w-full rounded-full accent-[var(--accent)]"
-                  />
-                  <span className="mt-0.5 block text-xs text-[var(--muted)]">{prefs.maxTravelTimeHours}h one-way</span>
-                </div>
-                <div>
-                  <label className="block text-sm text-[var(--muted)]">Transport</label>
-                  <select
-                    value={prefs.transportation}
-                    onChange={(e) => setPrefs((p) => ({ ...p, transportation: e.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-sm"
-                  >
-                    {TRANSPORT_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm text-[var(--muted)]">Constraints (e.g. wheelchair, dietary)</label>
-                  <input
-                    type="text"
-                    value={prefs.constraints}
-                    onChange={(e) => setPrefs((p) => ({ ...p, constraints: e.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-sm"
-                    placeholder="Optional"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-[var(--muted)]">Emphasis</label>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {EMPHASIS_OPTIONS.map((em) => {
-                      const on = prefs.emphasis.includes(em);
-                      return (
-                        <button
-                          key={em}
-                          type="button"
-                          onClick={() => setPrefs((p) => ({
-                            ...p,
-                            emphasis: on ? p.emphasis.filter((e) => e !== em) : [...p.emphasis, em],
-                          }))}
-                          className={`rounded-full px-2.5 py-1 text-xs ${on ? "bg-[var(--accent)] text-white" : "border border-[var(--border)] bg-[var(--muted-bg)]"}`}
-                        >
-                          {em}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm text-[var(--muted)]">Theme</label>
-                  <select
-                    value={prefs.theme}
-                    onChange={(e) => setPrefs((p) => ({ ...p, theme: e.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-sm"
-                  >
-                    {THEME_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm text-[var(--muted)]">Weather</label>
-                  <select
-                    value={prefs.weather}
-                    onChange={(e) => setPrefs((p) => ({ ...p, weather: e.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-sm"
-                  >
-                    {WEATHER_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+            <div className="hero-with-mesh relative overflow-hidden rounded-2xl border border-[var(--card-border)] p-6 text-center">
+              <h2 className="text-2xl font-bold text-[var(--foreground)]">Your trip ideas</h2>
+              <p className="mt-2 text-sm text-[var(--muted)]">Pick one to enter the trip universe and refine it.</p>
+            </div>
+            <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {suggestions.map((alt, i) => (
+                <SuggestionCard key={i} alternative={alt} onSelect={() => selectTrip(alt)} />
+              ))}
+            </div>
+              </>
             )}
+          </div>
+        )}
 
+        {step === "universe" && (
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <section className="card-lift rounded-2xl border border-[var(--card-border)] bg-[var(--card)] p-6">
+            <h2 className="text-lg font-medium text-[var(--foreground)]">Trip</h2>
             <button
-              onClick={generate}
-              disabled={!canGenerate || loading}
-              className="mt-5 w-full rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
-              aria-busy={loading}
+              type="button"
+              onClick={backToSuggestions}
+              className="mt-4 w-full rounded-xl border border-[var(--border)] bg-[var(--muted-bg)] px-4 py-2.5 text-sm font-medium transition-colors hover:border-[var(--accent)]/50 hover:bg-[var(--accent-soft)]/50"
             >
-              {loading ? "Generating…" : "Generate itinerary"}
+              ← Back to suggestions
             </button>
-
-            {error && (
-              <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
-                {error}
-              </p>
-            )}
-
-            <p className="mt-4 text-xs text-[var(--muted)]">
-              Drag blocks to reorder; click title or notes to edit inline.
-            </p>
-
             {dbAvailable === false && (
-              <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">
-                Add Supabase env vars to save and load trips.
-              </p>
+              <p className="mt-4 text-[11px] text-[var(--muted)]/80">Save & load with Supabase</p>
             )}
             {dbAvailable === true && (
               <>
@@ -605,7 +799,7 @@ export default function Home() {
                   type="button"
                   onClick={saveTrip}
                   disabled={!plan || saving}
-                  className="mt-4 w-full rounded-xl border border-[var(--border)] bg-[var(--muted-bg)] px-4 py-2.5 text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+                  className="mt-4 w-full rounded-xl border border-[var(--border)] bg-[var(--muted-bg)] px-4 py-2.5 text-sm font-medium transition-colors hover:border-[var(--accent)]/50 hover:bg-[var(--accent-soft)]/50 disabled:opacity-50"
                 >
                   {saving ? "Saving…" : "Save this trip"}
                 </button>
@@ -619,13 +813,13 @@ export default function Home() {
                     {loadingTrips ? "Loading…" : "My trips"}
                   </button>
                   {savedTrips.length > 0 && (
-                    <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] p-2">
+                    <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--muted-bg)] p-2">
                       {savedTrips.map((t) => (
                         <li key={t.id}>
                           <button
                             type="button"
                             onClick={() => loadTrip(t.id)}
-                            className="w-full rounded px-2 py-1.5 text-left text-sm hover:bg-[var(--border)]"
+                            className="w-full rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-[var(--accent-soft)]/40"
                           >
                             {(t.payload as PlanResponse)?.trip?.title ?? "Untitled"} · {new Date(t.updated_at).toLocaleDateString()}
                           </button>
@@ -638,52 +832,42 @@ export default function Home() {
             )}
           </section>
 
-          {/* Output: suggested itinerary → trip universe */}
-          <section className="md:col-span-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
-            {!plan ? (
-              <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--muted-bg)] p-8 text-center text-[var(--muted)]">
-                <p className="text-sm">
-                  No plan yet. Enter vibes and click <span className="font-medium text-[var(--foreground)]">Generate itinerary</span>, then step into your trip universe to refine it.
-                </p>
-              </div>
-            ) : (
+          <section className="card-lift md:col-span-2 rounded-2xl border border-[var(--card-border)] bg-[var(--card)] p-6">
+            {plan ? (
               <div>
                 {tripPhoto?.url && (
-                  <div className="mb-6 overflow-hidden rounded-xl">
+                  <div className="mb-6 overflow-hidden rounded-2xl ring-1 ring-[var(--border)]">
                     <img
                       src={tripPhoto.url}
                       alt={tripPhoto.alt}
-                      className="h-48 w-full object-cover"
+                      className="h-52 w-full object-cover"
                     />
-                    <p className="mt-1 text-right text-[10px] text-[var(--muted)]">
+                    <p className="bg-[var(--muted-bg)]/80 py-1 pr-3 text-right text-[10px] text-[var(--muted)]">
                       Photo: Unsplash
                     </p>
                   </div>
                 )}
-                <h2 className="text-2xl font-semibold">{plan.trip.title}</h2>
-                <p className="mt-2 text-[var(--muted)]">{plan.trip.summary}</p>
+                <h2 className="text-2xl font-semibold text-[var(--foreground)]">{plan.trip.title}</h2>
+                <p className="mt-2 text-[var(--muted)] leading-relaxed">{plan.trip.summary}</p>
 
-                <div className="mt-4 flex flex-wrap gap-2 text-xs">
-                  <span className="rounded-full border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-1">
-                    Region: {plan.trip.recommended_region}
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1.5 text-xs font-medium text-[var(--accent)]">
+                    {plan.trip.recommended_region}
                   </span>
-                  <span className="rounded-full border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-1">
-                    Season: {plan.trip.best_season}
-                  </span>
-                  <span className="rounded-full border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-1">
-                    Pace: {plan.trip.pace}
+                  <span className="rounded-full border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-1.5 text-xs text-[var(--muted)]">
+                    {plan.trip.best_season} · {plan.trip.pace}
                   </span>
                   {plan.trip.vibe_tags?.map((t) => (
                     <span
                       key={t}
-                      className="rounded-full border border-[var(--border)] px-3 py-1 text-[var(--muted)]"
+                      className="rounded-full border border-[var(--border)] px-3 py-1 text-xs text-[var(--muted)]"
                     >
                       #{t}
                     </span>
                   ))}
                 </div>
 
-                <div className="mt-6 rounded-2xl border-2 border-[var(--accent)]/30 bg-[var(--muted-bg)]/80 p-5 shadow-inner">
+                <div className="mt-6 rounded-2xl border border-[var(--accent)]/20 bg-[var(--accent-soft)]/30 p-5 shadow-[0_0_20px_var(--glow)]">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <h3 className="text-lg font-semibold text-[var(--accent)]">Your trip universe</h3>
@@ -696,7 +880,7 @@ export default function Home() {
                         type="button"
                         onClick={() => sendCopilotMessage("Make the trip more expensive / upscale")}
                         disabled={copilotLoading}
-                        className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--border)] disabled:opacity-50"
+                        className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-medium transition-colors hover:border-[var(--accent)]/40 hover:bg-[var(--accent-soft)]/50 disabled:opacity-50"
                       >
                         More expensive
                       </button>
@@ -704,14 +888,14 @@ export default function Home() {
                         type="button"
                         onClick={() => sendCopilotMessage("Make the trip less expensive / budget-friendly")}
                         disabled={copilotLoading}
-                        className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--border)] disabled:opacity-50"
+                        className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-medium transition-colors hover:border-[var(--accent)]/40 hover:bg-[var(--accent-soft)]/50 disabled:opacity-50"
                       >
                         Less expensive
                       </button>
                       <button
                         type="button"
                         onClick={() => setCopilotOpen((v) => !v)}
-                        className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+                        className="rounded-xl bg-[var(--accent)] px-4 py-2 text-xs font-medium text-white shadow-md shadow-[var(--accent)]/25 transition-all hover:bg-[var(--accent-hover)] hover:shadow-[var(--accent)]/30"
                       >
                         {copilotOpen ? "Hide" : "AI Copilot"}
                       </button>
@@ -728,43 +912,42 @@ export default function Home() {
                     screenReaderInstructions: defaultScreenReaderInstructions,
                   }}
                 >
-                  <div className="mt-4 space-y-4">
-                    {plan.itinerary?.map((d) => (
-                      <div
-                        key={d.day}
-                        className="rounded-2xl border border-[var(--border)] bg-[var(--muted-bg)] p-4"
-                      >
-                        <div className="mb-3 flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
-                          <h4 className="text-lg font-medium">Day {d.day}</h4>
-                          <span className="text-sm text-[var(--muted)]">
-                            Base: {d.base_location}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <p className="mt-4 text-sm text-[var(--muted)]">
+                    Chronological timeline — drag activities between slots; hover for details.
+                  </p>
+                  <div className="mt-4 overflow-x-auto pb-2">
+                    <div className="flex min-w-max gap-4">
+                      {plan.itinerary?.map((d) => (
+                        <div key={d.day} className="flex gap-3">
                           {TIME_SLOTS.map((time) => (
-                            <TimeBlock
-                              key={time}
-                              day={d.day}
-                              time={time}
-                              title={
-                                time === "morning"
-                                  ? "Morning"
-                                  : time === "afternoon"
-                                    ? "Afternoon"
-                                    : "Evening"
-                              }
-                              items={d.blocks.filter((b) => b.time === time)}
-                              onBlockChange={handleBlockChange}
-                            />
+                            <div
+                              key={`${d.day}-${time}`}
+                              className="w-56 shrink-0 rounded-xl border border-[var(--card-border)] bg-[var(--muted-bg)]/50 p-3"
+                            >
+                              <div className="mb-2 flex flex-col gap-0.5">
+                                <span className="text-xs font-medium text-[var(--muted)]">
+                                  Day {d.day} · {time === "morning" ? "AM" : time === "afternoon" ? "PM" : "Eve"}
+                                </span>
+                                {time === "morning" && (
+                                  <span className="text-[10px] text-[var(--muted)]/80">{d.base_location}</span>
+                                )}
+                              </div>
+                              <TimeBlock
+                                day={d.day}
+                                time={time}
+                                title={time === "morning" ? "Morning" : time === "afternoon" ? "Afternoon" : "Evening"}
+                                items={d.blocks.filter((b) => b.time === time)}
+                                onBlockChange={handleBlockChange}
+                              />
+                            </div>
                           ))}
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                   <DragOverlay>
                     {activeBlock ? (
-                      <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-2 shadow-lg ring-2 ring-[var(--accent)]">
+                      <div className="rounded-xl border border-[var(--accent)]/30 bg-[var(--card)] p-2.5 shadow-xl ring-2 ring-[var(--accent)]/20">
                         <div className="text-[var(--foreground)]">{activeBlock.title}</div>
                         {activeBlock.notes ? (
                           <div className="mt-1 text-xs text-[var(--muted)]">{activeBlock.notes}</div>
@@ -777,9 +960,10 @@ export default function Home() {
                   </DragOverlay>
                 </DndContext>
               </div>
-            )}
+            ) : null}
           </section>
         </div>
+        )}
       </div>
     </main>
   );
@@ -808,8 +992,8 @@ function TimeBlock({
   return (
     <div
       ref={setNodeRef}
-      className={`rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 transition-colors ${
-        isOver ? "border-[var(--accent)] bg-[var(--accent-soft)]" : ""
+      className={`rounded-xl border border-[var(--card-border)] bg-[var(--card)] p-3 transition-all duration-200 ${
+        isOver ? "border-[var(--accent)]/50 bg-[var(--accent-soft)]/40 shadow-[0_0_0_2px_var(--glow)]" : ""
       }`}
       aria-label={`Day ${day}, ${title}`}
     >
@@ -891,12 +1075,14 @@ function SortableBlock({
     else setNotesDraft(block.notes);
   };
 
+  const hoverTitle = block.notes ? `${block.title} — ${block.notes}` : block.title;
   return (
     <li
       ref={setNodeRef}
       style={style}
-      className={`rounded-lg border border-[var(--border)] bg-[var(--card)] p-2 ${
-        isDragging ? "opacity-80 shadow-lg ring-2 ring-[var(--accent)]" : ""
+      title={hoverTitle}
+      className={`rounded-xl border border-[var(--card-border)] bg-[var(--card)] p-2.5 transition-shadow ${
+        isDragging ? "opacity-90 shadow-xl ring-2 ring-[var(--accent)] shadow-[var(--glow)]" : "hover:shadow-md"
       }`}
     >
       <div className="flex items-start gap-2">

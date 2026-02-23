@@ -9,10 +9,11 @@
 
 ## Data flow
 
-1. User sets **trip preferences**: vibes, days; optionally “Add more detail” (priciness, origin, max travel time, transport, constraints, emphasis, theme, weather). Clicks **Generate itinerary**.
-2. Client `POST`s to `/api/plan` with full preferences. API hashes preferences for cache; on cache miss calls OpenAI with a rich prompt, then caches and returns `{ trip, itinerary }`.
-3. Client shows suggested itinerary (hero image optional) and **Your trip universe**: day cards with Morning/Afternoon/Evening blocks, drag-and-drop (@dnd-kit), inline edit (title, notes, type). Fine-tune buttons (More/Less expensive) and **AI Copilot** panel send messages to `/api/copilot`; optional revised plan is merged into state.
-4. Save/Load use `/api/trips` (Supabase). Plan cache reduces repeat OpenAI calls for same preferences.
+1. User sets **trip preferences**: vibes, days; optionally “Add more detail” (priciness, origin, max travel time, transport, constraints, emphasis, theme, weather). Clicks **Find my trips**.
+2. Client `POST`s to `/api/plan` with full preferences. API hashes preferences for cache; on cache miss calls OpenAI (worldwide, specific, actionable prompt); returns `{ alternatives: [PlanResponse, …] }` (3 alternatives).
+3. **Suggestions step:** Client shows three trip-idea cards (photo via `/api/photo` or placeholder). User picks one, clicks **Enter trip universe** → cinematic overlay → **Universe step**.
+4. **Universe step:** Selected trip with hero image, metadata, **horizontal chronological timeline** (Day 1 AM/PM/Eve, Day 2 …). Drag-and-drop between slots; hover shows block details; inline edit. Fine-tune and **AI Copilot** call `/api/copilot`; optional revised plan merged. "Back to suggestions" returns to step 3.
+5. Save/Load use `/api/trips` (Supabase). Loaded trip opens in universe. Plan cache reduces repeat OpenAI calls for same preferences.
 
 ## Conventions
 

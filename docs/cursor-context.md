@@ -64,14 +64,16 @@ Build an AI-powered travel planning platform with:
 
 ## Implemented
 
-- **Trip preferences:** Vibes + days; "Add more detail" for priciness, origin, max travel time, transport, constraints, emphasis, theme, weather. Plan API uses full prefs for prompt and cache.
-- Drag-and-drop itinerary (reorder/move blocks between days and time slots; DragOverlay + defaultScreenReaderInstructions for a11y)
+- **Step flow:** Params → Suggestions → Universe. Step 1: full-page parameter selection (large sliders, continuous scales, vibes, days, priciness, travel time, origin, transport, theme, weather, emphasis, constraints). Step 2: after "Find my trips", three trip-idea cards with photos (Unsplash or placeholder), "Enter trip universe" per card. Step 3: cinematic transition then universe view with horizontal chronological timeline.
+- **Trip preferences:** Full dimension set; Plan API uses full prefs for prompt and cache. Prompt stresses worldwide, specific, actionable recommendations (no generic fluff).
+- **Photos:** `app/api/photo/route.ts` returns Unsplash when `UNSPLASH_ACCESS_KEY` set; otherwise deterministic placeholder so suggestion cards and trip hero always show an image.
+- Drag-and-drop itinerary (horizontal timeline: chronological left-to-right; reorder/move blocks between day/time slots; DragOverlay + a11y). Hover on blocks shows title + notes tooltip.
 - Editable activity blocks (title, notes, type)
-- Save/load trips (Supabase `trips` table; My trips list)
-- Plan cache (Supabase `plan_cache`; same vibes+days returns cached plan, fewer OpenAI calls)
-- Trip universe (fine-tune + AI Copilot): suggested itinerary → “Your trip universe” section to elaborate/tweak with drag-and-drop
-- Visuals: editorial palette (CSS variables), hero image from Unsplash per trip
-- Single context file: `docs/cursor-context.md` only (duplicate `cursos-context.md` removed)
+- Save/load trips (Supabase `trips` table; My trips list). Loaded trip opens directly in universe.
+- Plan cache (Supabase `plan_cache`; same prefs return cached alternatives)
+- Trip universe: horizontal timeline, fine-tune buttons, AI Copilot panel. Back to suggestions → “Your trip universe” when coming from suggestions list.
+- Visuals: editorial palette (CSS variables), hero-with-mesh, suggestion-card styles, cinematic overlay when selecting a trip
+- Single context file: `docs/cursor-context.md` only
 
 ## Next steps (priority)
 

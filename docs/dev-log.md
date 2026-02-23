@@ -4,6 +4,17 @@ Chronological audit trail of features, fixes, and decisions.
 
 ---
 
+## 2026-02-22 (UX overhaul)
+
+- **Step flow:** Three steps: Params → Suggestions → Universe. Params: full-page "Design your trip" with large sliders (days 1–60, priciness 1–5, max travel 1–24h), vibes textarea, origin, transport, theme, weather, emphasis chips, constraints. Only after "Find my trips" does the user see the next page (suggestions).
+- **Suggestions page:** Three trip-idea cards with image (photo API or placeholder), title, region, summary, vibe tags, "Enter trip universe". "Change parameters" returns to params. Photos: `/api/photo` now returns a deterministic placeholder (picsum.photos seed) when Unsplash is unconfigured or returns nothing, so images always show.
+- **Cinematic:** On "Enter trip universe", a full-screen overlay ("Entering trip universe…" + progress bar) plays ~1.4s, then the universe view is shown.
+- **Horizontal timeline:** Universe view shows the itinerary on a horizontal chronological axis (Day 1 AM, PM, Eve, Day 2 AM, …) with overflow-x scroll. Same drag-and-drop and sortable blocks; hover on a block shows tooltip (title + notes).
+- **API prompt:** Plan API prompt and system message updated for worldwide, specific, actionable trip recommendations (real places and activities; no generic fluff).
+- **Docs:** `docs/cursor-context.md` and `docs/architecture.md` updated for step flow, timeline, photo fallback, and prompt.
+
+---
+
 ## 2026-02-23 (continued)
 
 - **Trip preferences and “Add more detail”:** Added full dimension set for trip input. Default view: vibes + days. Toggle **Add more detail** reveals: priciness (1–5 slider, Budget → Splurge), origin (text), max travel time (1–24h slider), transport (any/flight/train/car/mixed/ferry), constraints (text, e.g. wheelchair, dietary), emphasis (multi-select chips: culture, history, fun, relax, adventure, food, nature, nightlife), theme (none/wedding/stag do/girls weekend/honeymoon/family/solo), weather (any/warm/cool/avoid rain/sunny). Shared types and defaults in `lib/trip-preferences.ts`; `lib/types.ts` holds Block, Day, PlanResponse. Plan API (`app/api/plan/route.ts`) accepts full preferences, builds a rich prompt, and uses `hash(JSON.stringify(prefs))` for plan cache.
