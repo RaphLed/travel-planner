@@ -2,21 +2,19 @@
 
 ## Overview
 
-- **Frontend:** Next.js App Router. Single main page at `app/page.tsx` (client component). No `src/` — app and API live under `app/`.
-- **Backend:** Next.js API route `app/api/plan/route.ts`. No database yet.
-- **AI:** OpenAI called only from the API route (never from the browser). API key in `OPENAI_API_KEY` env.
-- **State:** Itinerary and trip data live in React state on the client; no persistence yet.
+- **Frontend:** Next.js App Router. Single main page at `app/page.tsx` (client component). App and API live under `app/`.
+- **Backend:** Next.js API routes: `app/api/plan/route.ts` (generate itinerary), `app/api/copilot/route.ts` (refine trip via chat), `app/api/trips/*` (save/load), `app/api/photo/route.ts` (Unsplash).
+- **AI:** OpenAI called only from API routes (never from the browser). Keys in env.
+- **State:** Itinerary and trip data in React state; preferences (vibes, days, priciness, origin, transport, constraints, emphasis, theme, weather) in state; optional Supabase for persistence and plan cache.
 
 ## Data flow
 
-1. User enters vibes + days and clicks **Generate itinerary**.
-2. Client `POST`s to `/api/plan` with `{ vibes, days }`.
-3. API validates env and body, calls OpenAI (Responses API, `json_object` output), parses response.
-4. API returns JSON `{ trip, itinerary }` to the client.
-5. Client sets `plan` state and renders trip header + day cards; each day has three time blocks (Morning / Afternoon / Evening) with activity blocks.
-6. Drag-and-drop updates `plan.itinerary` (reorder / move blocks). Inline editing updates title, notes, and type. Uses @dnd-kit/core and @dnd-kit/sortable; each time slot is a droppable zone; each block is sortable with a grip handle.
+1. User sets **trip preferences**: vibes, days; optionally “Add more detail” (priciness, origin, max travel time, transport, constraints, emphasis, theme, weather). Clicks **Generate itinerary**.
+2. Client `POST`s to `/api/plan` with full preferences. API hashes preferences for cache; on cache miss calls OpenAI with a rich prompt, then caches and returns `{ trip, itinerary }`.
+3. Client shows suggested itinerary (hero image optional) and **Your trip universe**: day cards with Morning/Afternoon/Evening blocks, drag-and-drop (@dnd-kit), inline edit (title, notes, type). Fine-tune buttons (More/Less expensive) and **AI Copilot** panel send messages to `/api/copilot`; optional revised plan is merged into state.
+4. Save/Load use `/api/trips` (Supabase). Plan cache reduces repeat OpenAI calls for same preferences.
 
 ## Conventions
 
-- Types for `Block`, `Day`, `PlanResponse` are defined in `app/page.tsx`; consider moving to a shared types module when adding API reuse or persistence.
-- All user-facing copy and structure are in the app; no i18n yet.
+- Shared types in `lib/types.ts` (Block, Day, PlanResponse) and `lib/trip-preferences.ts` (TripPreferences, defaults, options). APIs and page import from these.
+- All user-facing copy in the app; no i18n yet.

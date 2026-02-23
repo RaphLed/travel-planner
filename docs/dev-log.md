@@ -4,6 +4,15 @@ Chronological audit trail of features, fixes, and decisions.
 
 ---
 
+## 2026-02-23 (continued)
+
+- **Trip preferences and “Add more detail”:** Added full dimension set for trip input. Default view: vibes + days. Toggle **Add more detail** reveals: priciness (1–5 slider, Budget → Splurge), origin (text), max travel time (1–24h slider), transport (any/flight/train/car/mixed/ferry), constraints (text, e.g. wheelchair, dietary), emphasis (multi-select chips: culture, history, fun, relax, adventure, food, nature, nightlife), theme (none/wedding/stag do/girls weekend/honeymoon/family/solo), weather (any/warm/cool/avoid rain/sunny). Shared types and defaults in `lib/trip-preferences.ts`; `lib/types.ts` holds Block, Day, PlanResponse. Plan API (`app/api/plan/route.ts`) accepts full preferences, builds a rich prompt, and uses `hash(JSON.stringify(prefs))` for plan cache.
+- **AI Copilot:** New route `app/api/copilot/route.ts`: POST `{ plan, message }` → OpenAI returns `{ reply, plan? }`; optional revised plan is merged on the client. UI: optional side panel (slide from right) when in trip universe, with pre-written suggestion chips (e.g. “Add 2 museums”, “Less expensive options”, “Wheelchair-accessible only”) and a chat input. User can click a chip or type; assistant reply and optional plan update are applied.
+- **Trip universe feel:** Trip universe section wrapped in a distinct container (border, bg) with fine-tune buttons **More expensive** / **Less expensive** (call copilot with that instruction) and **AI Copilot** toggle. Copy and layout emphasize “elaborate, tweak, and mold” once inside the universe.
+- **Docs:** Updated `docs/architecture.md` (data flow, preferences, copilot), `docs/stack.md` (dimensions, DB, photos), `docs/how-it-works.md` (user journey, sequence diagram, app structure for preferences and copilot). New **README.md** (features, stack, getting started, docs pointers).
+
+---
+
 ## 2026-02-23
 
 - **Drag-and-drop UX and a11y:** Added `DragOverlay` so the dragged activity block follows the cursor as a floating preview (no “ghost” left in the list). Wired `defaultScreenReaderInstructions` into `DndContext` for keyboard and screen-reader users. Docs: `docs/how-it-works.md`, `docs/stack.md`, `docs/cursor-context.md` updated to describe DragOverlay and a11y.

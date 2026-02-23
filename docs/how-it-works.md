@@ -8,16 +8,18 @@ This doc helps you explain the site to others: **what it does** and **how it’s
 
 ```mermaid
 flowchart LR
-  A[Enter vibes + days] --> B[Click Generate]
-  B --> C[See suggested itinerary + hero image]
-  C --> D[Your trip universe: day-by-day blocks]
-  D --> E[Drag blocks between days/slots]
-  E --> F[Edit title, notes, type inline]
-  F --> G[Save trip / Load from My trips]
-  G --> H[Plan cache reduces repeat API calls]
+  A[Vibes + days] --> B[Optional: Add more detail]
+  B --> C[Priciness, origin, transport, constraints, emphasis, theme, weather]
+  C --> D[Generate itinerary]
+  D --> E[Suggested itinerary + hero image]
+  E --> F[Enter trip universe]
+  F --> G[Drag / edit blocks]
+  G --> H[Fine-tune: More or Less expensive]
+  H --> I[AI Copilot: suggestions + chat]
+  I --> J[Save / Load from My trips]
 ```
 
-**In words:** The user types vibes and days, then clicks **Generate itinerary**. They see a **suggested itinerary** (trip title, summary, optional hero photo from Unsplash, region, season, pace). Below that, **Your trip universe** lets them elaborate, tweak, and mold the trip: drag blocks between days and time slots, click title/notes to edit inline, change activity type. They can **Save this trip** (if Supabase is configured) and **My trips** to load a saved itinerary. Identical generate requests use a **plan cache** to avoid extra OpenAI calls.
+**In words:** The user sets vibes and days; they can toggle **Add more detail** to set priciness (slider), origin, max travel time, transport, constraints (e.g. wheelchair), emphasis (culture, history, fun, relax, etc.), theme (wedding, stag do, girls weekend, etc.), and weather. After **Generate itinerary**, they see the suggested trip and step into **Your trip universe** to drag and edit blocks. They can use **More expensive** / **Less expensive** or open the **AI Copilot** panel to click suggestions (e.g. “Add 2 museums”, “Less expensive options”) or type requests; the copilot can return a revised plan. Save/Load and plan cache work as before.
 
 ---
 
@@ -28,14 +30,16 @@ sequenceDiagram
   participant U as User (browser)
   participant P as app/page.tsx
   participant PlanAPI as app/api/plan
+  participant CopilotAPI as app/api/copilot
   participant TripsAPI as app/api/trips
   participant PhotoAPI as app/api/photo
   participant Supabase as Supabase
   participant OAI as OpenAI
   participant Unsplash as Unsplash
 
-  U->>P: Enter vibes, days, click Generate
-  P->>PlanAPI: POST /api/plan { vibes, days }
+  U->>P: Set preferences (vibes, days, optional detail), click Generate
+  P->>PlanAPI: POST /api/plan { full preferences }
+  PlanAPI->>PlanAPI: Hash preferences
   PlanAPI->>Supabase: Check plan_cache by input hash
   alt cache hit
     Supabase-->>PlanAPI: cached payload
@@ -51,8 +55,14 @@ sequenceDiagram
   PhotoAPI->>Unsplash: search photos
   Unsplash-->>PhotoAPI: image URL
   PhotoAPI-->>P: { url, alt }
-  P->>U: Render suggestion + trip universe (hero image, days, blocks)
-  U->>P: Drag / edit / Save / Load
+  P->>U: Render suggestion + trip universe (hero, days, blocks, fine-tune, copilot button)
+  U->>P: Drag / edit / Fine-tune / Open copilot
+  P->>CopilotAPI: POST /api/copilot { plan, message }
+  CopilotAPI->>OAI: Refine trip
+  OAI-->>CopilotAPI: { reply, plan? }
+  CopilotAPI-->>P: reply + optional updated plan
+  P->>P: Merge plan if returned
+  U->>P: Save / Load
   P->>TripsAPI: GET /api/trips or POST /api/trips or GET /api/trips/[id]
   TripsAPI->>Supabase: Read/write trips table
   Supabase-->>P: list or saved payload
@@ -69,39 +79,44 @@ sequenceDiagram
 flowchart TB
   subgraph Client["Browser (React)"]
     Page["app/page.tsx"]
-    Page --> State["State: vibes, days, plan, savedTrips, tripPhoto, dbAvailable"]
+    Page --> State["State: prefs, plan, copilot, savedTrips, tripPhoto"]
     Page --> DND["DndContext (@dnd-kit)"]
-    Page --> UI["UI: form + suggested itinerary + Your trip universe"]
-    UI --> Hero["Hero image (Unsplash) when plan exists"]
-    UI --> TimeBlock["TimeBlock: droppable zone + SortableContext"]
-    TimeBlock --> SortableBlock["SortableBlock: draggable + editable (title, notes, type)"]
-    UI --> SaveLoad["Save this trip / My trips"]
+    Page --> UI["Form (vibes, days, Add more detail) + itinerary + trip universe"]
+    UI --> Prefs["Preferences: priciness, origin, transport, constraints, emphasis, theme, weather"]
+    UI --> Hero["Hero image (Unsplash)"]
+    UI --> Universe["Trip universe: fine-tune + AI Copilot panel"]
+    UI --> TimeBlock["TimeBlock + SortableBlock"]
+    UI --> SaveLoad["Save / My trips"]
     DND --> TimeBlock
   end
 
   subgraph Server["Next.js API"]
     PlanRoute["app/api/plan/route.ts"]
+    CopilotRoute["app/api/copilot/route.ts"]
     TripsRoute["app/api/trips/route.ts"]
     TripIdRoute["app/api/trips/[id]/route.ts"]
     PhotoRoute["app/api/photo/route.ts"]
   end
 
   PlanRoute --> OpenAI["OpenAI API"]
+  CopilotRoute --> OpenAI
   PlanRoute --> Supabase["Supabase (plan_cache)"]
   TripsRoute --> Supabase["Supabase (trips)"]
-  TripIdRoute --> Supabase["Supabase (trips)"]
+  TripIdRoute --> Supabase
   PhotoRoute --> Unsplash["Unsplash API"]
 
-  Page -->|"POST /api/plan"| PlanRoute
+  Page -->|"POST /api/plan (prefs)"| PlanRoute
+  Page -->|"POST /api/copilot (plan, msg)"| CopilotRoute
   Page -->|"GET/POST /api/trips"| TripsRoute
   Page -->|"GET /api/trips/[id]"| TripIdRoute
   Page -->|"GET /api/photo?q="| PhotoRoute
   PlanRoute -->|"JSON"| Page
+  CopilotRoute -->|"reply, plan?"| Page
   TripsRoute -->|"list / saved"| Page
   PhotoRoute -->|"url, alt"| Page
 ```
 
-**In words:** `app/page.tsx` holds all state and renders the form, suggested itinerary (with optional Unsplash hero), and **Your trip universe** (DndContext + day cards + sortable blocks). Drag-and-drop uses **DragOverlay** for a visible drag preview and **defaultScreenReaderInstructions** so keyboard and screen-reader users can reorder and move blocks. Save/Load and My trips call `/api/trips`. Plan generation uses `/api/plan` (with optional Supabase plan cache). Trip images come from `/api/photo` (Unsplash). See `docs/supabase-schema.sql` for DB tables.
+**In words:** `app/page.tsx` holds preferences (vibes, days, and optional detail: priciness, origin, transport, constraints, emphasis, theme, weather), plan state, and copilot state. The form has an “Add more detail” toggle for full dimensions. Plan generation uses `/api/plan` with full preferences (and optional Supabase plan cache). The **trip universe** includes fine-tune buttons and an **AI Copilot** side panel (suggestions + chat) that calls `/api/copilot`; optional revised plans are merged. Drag-and-drop uses **DragOverlay** and **defaultScreenReaderInstructions**. Save/Load use `/api/trips`. See `docs/supabase-schema.sql` for DB tables.
 
 ---
 

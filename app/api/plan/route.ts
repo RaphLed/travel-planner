@@ -1,19 +1,42 @@
 import { getSupabase } from "@/lib/supabase";
+import {
+  normalizePreferences,
+  PRICINESS_LABELS,
+  type TripPreferences,
+} from "@/lib/trip-preferences";
 import { createHash } from "crypto";
 import OpenAI from "openai";
 
-function inputHash(vibes: string, days: number): string {
-  return createHash("sha256").update(`${vibes}|${days}`).digest("hex");
+function inputHash(prefs: TripPreferences): string {
+  return createHash("sha256").update(JSON.stringify(prefs)).digest("hex");
+}
+
+function buildPrompt(prefs: TripPreferences): string {
+  const days = prefs.days;
+  const vibes = prefs.vibes;
+  const priceLabel = PRICINESS_LABELS[Math.min(prefs.priciness - 1, 4)] ?? "Moderate";
+  const parts: string[] = [
+    `Create a ${days}-day trip idea.`,
+    `Vibes/keywords: ${vibes}.`,
+    `Budget level: ${priceLabel} (${prefs.priciness}/5).`,
+  ];
+  if (prefs.origin.trim()) parts.push(`Travellers depart from: ${prefs.origin.trim()}.`);
+  if (prefs.maxTravelTimeHours < 24) parts.push(`Maximum one-way travel time: ${prefs.maxTravelTimeHours} hours.`);
+  if (prefs.transportation && prefs.transportation !== "any") parts.push(`Preferred transport: ${prefs.transportation}.`);
+  if (prefs.constraints.trim()) parts.push(`Constraints/requirements: ${prefs.constraints.trim()}.`);
+  if (prefs.emphasis.length > 0) parts.push(`Emphasis: ${prefs.emphasis.join(", ")}.`);
+  if (prefs.theme && prefs.theme !== "none") parts.push(`Trip theme: ${prefs.theme}.`);
+  if (prefs.weather && prefs.weather !== "any") parts.push(`Weather preference: ${prefs.weather}.`);
+
+  return parts.join(" ");
 }
 
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-    const vibes = typeof body.vibes === "string" ? body.vibes : "sun, nature, solitude";
-    const days = typeof body.days === "number" ? body.days : 5;
-    const hash = inputHash(vibes, days);
+    const prefs = normalizePreferences(body);
+    const hash = inputHash(prefs);
 
-    // Return cached plan if available (reduces API calls)
     const supabase = getSupabase();
     if (supabase) {
       const { data: cached } = await supabase
@@ -38,6 +61,7 @@ export async function POST(req: Request) {
     }
 
     const client = new OpenAI({ apiKey });
+    const promptText = buildPrompt(prefs);
 
     const response = await client.responses.create({
       model: "gpt-4o-mini",
@@ -50,7 +74,7 @@ export async function POST(req: Request) {
         },
         {
           role: "user",
-          content: `Create a ${days}-day trip idea based on these vibes: ${vibes}.
+          content: `${promptText}
 
 Return JSON with this exact structure (no markdown, no code fences):
 
@@ -81,11 +105,11 @@ Return JSON with this exact structure (no markdown, no code fences):
 }
 
 Rules:
-- You MUST include exactly ${days} day objects in "itinerary".
+- You MUST include exactly ${prefs.days} day objects in "itinerary".
 - Each "blocks" item MUST have a unique id. Use the format: d{day}-{m|a|e}-{index}, e.g. d3-a-2.
 - Each day should have 2–4 blocks per time period (morning/afternoon/evening) unless the vibe implies slower pace.
-- "base_location" should be a realistic place (city/town/region).
-- "notes" should be short and practical (1–2 sentences).`,
+- "base_location" should be a realistic place (city/town/region). Respect origin and max travel time when suggesting region.
+- "notes" should be short and practical (1–2 sentences). Respect budget level, constraints, and theme in your suggestions.`,
         },
       ],
     });
@@ -107,13 +131,12 @@ Rules:
 
     const data = JSON.parse(raw) as { trip: unknown; itinerary: unknown };
 
-    // Store in cache for future identical requests
     if (supabase) {
       await supabase.from("plan_cache").upsert(
         {
           input_hash: hash,
-          vibes,
-          days,
+          vibes: prefs.vibes,
+          days: prefs.days,
           payload: data,
         },
         { onConflict: "input_hash" }
