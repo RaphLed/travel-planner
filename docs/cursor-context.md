@@ -1,83 +1,40 @@
-# Travel Planner — Cursor context
+# Travel Planner — project context
 
-**Single source of truth for project context.** (Do not create a duplicate file with a similar name.)
+**Entry point for contributors and AI.** For full technical detail use [architecture.md](./architecture.md); for change history use [changelog.md](./changelog.md); for product vision use [vision-and-quality.md](./vision-and-quality.md).
 
-This is a Next.js 15 App Router project.
-
-## Purpose
-
-Build an AI-powered travel planning platform with:
-
-- AI-generated itineraries
-- Editable activity blocks
-- Drag-and-drop timeline
-- Accessibility-first design
-- Future database persistence
-- Eventually public deployment
-
-## Stack
-
-- Next.js App Router, TypeScript, Tailwind CSS
-- OpenAI Responses API (itinerary generation)
-- Supabase (trips table: save/load; plan_cache: reduce API calls)
-- Unsplash (trip/destination images via `app/api/photo/route.ts`)
-- @dnd-kit (drag-and-drop itinerary)
+- **What it is:** Next.js 15 App Router app. AI-generated trip alternatives → user picks one → trip universe (timeline, drag-and-drop, AI Copilot, save/load).
+- **Stack:** Next.js, TypeScript, Tailwind, OpenAI, Supabase, Unsplash, @dnd-kit. See [architecture.md](./architecture.md) §3–4 for paths and stack table.
 
 ## Key paths
 
-| Role   | Path |
-|--------|------|
-| UI     | `app/page.tsx` |
-| Plan API | `app/api/plan/route.ts` (OpenAI + optional plan_cache) |
-| Trips API | `app/api/trips/route.ts`, `app/api/trips/[id]/route.ts` |
-| Photo API | `app/api/photo/route.ts` (Unsplash) |
-| Copilot API | `app/api/copilot/route.ts` (refine trip via chat) |
-| Preferences | `lib/trip-preferences.ts`, `lib/types.ts` |
-| DB schema | `docs/supabase-schema.sql` |
-| Env example | `.env.example` |
+| Role     | Path |
+|----------|------|
+| UI       | `app/page.tsx` |
+| Plan     | `app/api/plan/route.ts` |
+| Photo    | `app/api/photo/route.ts` |
+| Copilot  | `app/api/copilot/route.ts` |
+| Trips    | `app/api/trips/route.ts`, `app/api/trips/[id]/route.ts` |
+| Destinations | `lib/destinations.ts`, `app/api/destinations/route.ts`, `app/api/plan/destination/route.ts` |
+| Block alternatives | `app/api/block-alternatives/route.ts` |
+| Types    | `lib/types.ts`, `lib/trip-preferences.ts` |
+| DB schema| `docs/supabase-schema.sql` |
 
-## Current schema
+## Current data shape
 
-```json
-{
-  "trip": { "title", "summary", "vibe_tags", "recommended_region", "best_season", "pace" },
-  "itinerary": [
-    { "day", "base_location", "blocks": [{ "id", "time", "title", "type", "notes" }] }
-  ]
-}
-```
-
-## Goals (priority order)
-
-1. Drag-and-drop itinerary editing
-2. Editable activity blocks
-3. Save/load trips
-4. Multi-trip browsing
-5. Eventually deploy publicly
-
-## Constraints
-
-- Clean architecture
-- Maintainable code
-- Accessibility compliance
-- Professional-grade UX
+- Plan API returns `{ alternatives: PlanResponse[] }` (3). Each **PlanResponse**: `{ trip: { title, summary, vibe_tags, recommended_region, best_season, pace }, itinerary: Day[] }`. **Day**: `{ day, base_location, blocks }`. **Block**: `{ id, time, title, type, notes }`.
 
 ## Implemented
 
-- **Step flow:** Params → Suggestions → Universe. Step 1: full-page parameter selection (large sliders, continuous scales, vibes, days, priciness, travel time, origin, transport, theme, weather, emphasis, constraints). Step 2: after "Find my trips", three trip-idea cards with photos (Unsplash or placeholder), "Enter trip universe" per card. Step 3: cinematic transition then universe view with horizontal chronological timeline.
-- **Trip preferences:** Full dimension set; Plan API uses full prefs for prompt and cache. Prompt stresses worldwide, specific, actionable recommendations (no generic fluff).
-- **Photos:** `app/api/photo/route.ts` returns Unsplash when `UNSPLASH_ACCESS_KEY` set; otherwise deterministic placeholder so suggestion cards and trip hero always show an image.
-- Drag-and-drop itinerary (horizontal timeline: chronological left-to-right; reorder/move blocks between day/time slots; DragOverlay + a11y). Hover on blocks shows title + notes tooltip.
-- Editable activity blocks (title, notes, type)
-- Save/load trips (Supabase `trips` table; My trips list). Loaded trip opens directly in universe.
-- Plan cache (Supabase `plan_cache`; same prefs return cached alternatives)
-- Trip universe: horizontal timeline, fine-tune buttons, AI Copilot panel. Back to suggestions → “Your trip universe” when coming from suggestions list.
-- Visuals: editorial palette (CSS variables), hero-with-mesh, suggestion-card styles, cinematic overlay when selecting a trip
-- Single context file: `docs/cursor-context.md` only
+- Step flow (Params → Suggestions → Universe); luxury visual system; full-page params with trip story; 3 suggestion cards (destination first, title italic); cinematic entry; universe: one day per column, Timeline | Calendar, activity filter, Google Maps link, hints, Copilot; save/load; plan cache; photo fallback.
+- **Auth (optional):** Supabase Auth via @supabase/ssr; Sign in / Create account in header; trips scoped by user_id; “Sign in to save and share trips” when not logged in.
+- **Sharing:** Share trip (after save) via link; Viewer (read-only) or Editor (inline edit on /share/[token], Save changes). Share links table; GET/PATCH by token (service role).
+- **Explore universes:** Destinations database (cities + KPIs: travel time, temp, rain, beauty/culture/party/safety/luxury/priciness). `GET /api/destinations` filters by prefs (maxTravelTimeHours, maxPriciness, travelMode), sortable. “Explore universes” / “Or explore universes” opens table; “Enter trip universe” on a row calls `POST /api/plan/destination` (single-destination itinerary) and goes to universe.
+- **Block alternatives:** On universe timeline, each activity block has “Swap”: `POST /api/block-alternatives` (location, type, currentTitle) returns AI-suggested alternatives (e.g. top museums in Paris); user picks one to replace the block title/notes.
 
-## Next steps (priority)
+## Next (priority)
 
-- Multi-trip browsing / dashboard
-- Auth (e.g. Supabase Auth) to scope trips to users
-- Monetization hooks (e.g. sponsored slots, affiliate links) — see `docs/vision-and-quality.md`
+- Multi-trip dashboard; email delivery of share link (optional); optional monetization (see vision-and-quality.md).
 
+## Constraints
+
+- Clean architecture; accessibility; professional UX. No duplicate context docs; single source of truth for technical content is [architecture.md](./architecture.md).

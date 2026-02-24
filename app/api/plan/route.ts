@@ -30,6 +30,7 @@ function buildPrompt(prefs: TripPreferences): string {
   if (prefs.emphasis.length > 0) parts.push(`Emphasis: ${prefs.emphasis.join(", ")}.`);
   if (prefs.theme && prefs.theme !== "none") parts.push(`Trip theme: ${prefs.theme}.`);
   if (prefs.weather && prefs.weather !== "any") parts.push(`Weather preference: ${prefs.weather}.`);
+  if (prefs.tripStory?.trim()) parts.push(`Trip story or specific preferences (prioritise this): ${prefs.tripStory.trim()}.`);
 
   return parts.join(" ");
 }

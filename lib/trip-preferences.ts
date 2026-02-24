@@ -7,9 +7,11 @@ export type TripPreferences = {
   maxTravelTimeHours: number;
   transportation: string;
   constraints: string;
-  emphasis: string[]; // culture, history, fun, relax, adventure, food, nature
+  emphasis: string[];
   theme: string;
   weather: string;
+  /** Free-form story, vibe, or specific preferences for the trip (used in prompt). */
+  tripStory: string;
 };
 
 export const DEFAULT_PREFERENCES: TripPreferences = {
@@ -23,6 +25,7 @@ export const DEFAULT_PREFERENCES: TripPreferences = {
   emphasis: [],
   theme: "none",
   weather: "any",
+  tripStory: "",
 };
 
 export const PRICINESS_LABELS = ["Budget", "Moderate", "Comfort", "Upscale", "Splurge"] as const;
@@ -74,5 +77,6 @@ export function normalizePreferences(body: unknown): TripPreferences {
     emphasis: Array.isArray(b.emphasis) ? (b.emphasis as unknown[]).filter((e): e is string => typeof e === "string") : DEFAULT_PREFERENCES.emphasis,
     theme: typeof b.theme === "string" ? b.theme : DEFAULT_PREFERENCES.theme,
     weather: typeof b.weather === "string" ? b.weather : DEFAULT_PREFERENCES.weather,
+    tripStory: typeof b.tripStory === "string" ? b.tripStory : DEFAULT_PREFERENCES.tripStory,
   };
 }
