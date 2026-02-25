@@ -21,8 +21,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Travel Planner",
-  description: "AI-powered trip ideas. Generate itineraries, then shape your trip universe with drag-and-drop.",
+  title: "Atlas",
+  description: "Atlas — AI-powered trip ideas. Generate itineraries, then shape your trip universe with drag-and-drop.",
 };
 
 export default function RootLayout({

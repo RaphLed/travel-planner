@@ -14,6 +14,7 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const plan = body.plan as PlanResponse | null | undefined;
     const message = typeof body.message === "string" ? body.message.trim() : "";
+    const history = Array.isArray(body.history) ? body.history as { role: string; content: string }[] : [];
     if (!message) {
       return new Response(JSON.stringify({ error: "Missing message" }), {
         status: 400,
@@ -23,6 +24,10 @@ export async function POST(req: Request) {
 
     const client = new OpenAI({ apiKey });
     const planJson = plan ? JSON.stringify(plan) : "No trip loaded yet.";
+    const lastTurns = history.slice(-4).filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string");
+    const contextBlock = lastTurns.length > 0
+      ? `\n\nPrevious conversation (for context):\n${lastTurns.map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`).join("\n")}\n\nLatest user request: `
+      : "\n\nUser request: ";
 
     const response = await client.responses.create({
       model: "gpt-4o-mini",
@@ -30,7 +35,7 @@ export async function POST(req: Request) {
       input: [
         {
           role: "system",
-          content: `You are a travel copilot. The user has a trip itinerary (or none). They send a short message (e.g. "Make it cheaper", "Add 2 museums", "Wheelchair-accessible only").
+          content: `You are a travel copilot. The user has a trip itinerary (or none). They send messages to refine it (e.g. "Make it cheaper", "Add 2 museums"). Use any prior messages in the conversation for context (e.g. "make it even cheaper" means go further than before).
 Respond with a JSON object:
 - "reply": a short, friendly reply (1-3 sentences) acknowledging their request and what you suggest.
 - "plan": (optional) if you can output a revised full itinerary that applies their request, include it in the exact same structure as the input trip: { "trip": {...}, "itinerary": [ { "day", "base_location", "blocks": [ { "id", "time", "title", "type", "notes" } ] } ] }. Keep all block ids unique (d{day}-{m|a|e}-{index}). If you cannot or the request is vague, omit "plan".
@@ -38,7 +43,7 @@ Return ONLY valid JSON, no markdown.`,
         },
         {
           role: "user",
-          content: `Current trip:\n${planJson}\n\nUser request: ${message}`,
+          content: `Current trip:\n${planJson}${contextBlock}${message}`,
         },
       ],
     });

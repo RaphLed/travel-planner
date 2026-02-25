@@ -97,6 +97,7 @@ export default function ShareTripPage({
   return (
     <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
       <div className="mx-auto max-w-[1200px] px-6 py-14">
+        <p className="mb-8 font-heading text-xs font-light tracking-[0.2em] uppercase text-[var(--muted)]">Atlas</p>
         <div className="mb-12 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="font-heading text-2xl font-medium tracking-tight sm:text-3xl">{payload.trip.recommended_region}</h1>
@@ -125,7 +126,7 @@ export default function ShareTripPage({
               href="/"
               className="rounded-lg border border-[var(--border)] px-4 py-2.5 text-[14px] text-[var(--muted)] hover:text-[var(--foreground)]"
             >
-              Go to Travel Planner
+              Go to Atlas
             </a>
           </div>
         </div>

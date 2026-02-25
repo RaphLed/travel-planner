@@ -24,12 +24,15 @@ import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import type { PlanResponse } from "@/lib/types";
 import type { Block, Day } from "@/lib/types";
 import type { Destination } from "@/lib/destinations";
+import { getDestinationContext } from "@/lib/destination-context";
 import {
   DEFAULT_PREFERENCES,
   EMPHASIS_OPTIONS,
   PRICINESS_LABELS,
+  CONSTRAINT_PRESETS,
   THEME_OPTIONS,
   TRANSPORT_OPTIONS,
+  TRIP_STRUCTURE_OPTIONS,
   WEATHER_OPTIONS,
   type TripPreferences,
 } from "@/lib/trip-preferences";
@@ -129,6 +132,55 @@ function updateBlockInItinerary(
 
 type SavedTrip = { id: string; created_at: string; updated_at: string; payload: PlanResponse };
 
+function InfoTooltip({ text, children }: { text?: string; children?: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const content = children ?? text ?? "";
+  const isString = typeof content === "string";
+
+  const openTooltip = () => setOpen(true);
+  const closeTooltip = () => setOpen(false);
+
+  return (
+    <span
+      className="relative ml-1.5 inline-flex cursor-help"
+      onMouseEnter={openTooltip}
+      onMouseLeave={closeTooltip}
+      onFocus={openTooltip}
+      onBlur={closeTooltip}
+    >
+      <button
+        type="button"
+        tabIndex={0}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border)] text-[10px] font-medium text-[var(--muted)] hover:border-[var(--accent)]/50 hover:text-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/50 focus:ring-offset-2"
+        aria-label={isString ? (content as string) : "More information"}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            closeTooltip();
+            (e.target as HTMLElement).blur();
+          }
+        }}
+      >
+        i
+      </button>
+      {open && (
+        <span
+          className="absolute left-0 top-full z-[100] mt-1.5 max-w-[280px] rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-[12px] leading-relaxed text-[var(--foreground)] shadow-lg"
+          role="tooltip"
+          id="info-tooltip-content"
+        >
+          {isString ? (
+            <span className="italic">{content as string}</span>
+          ) : (
+            content
+          )}
+        </span>
+      )}
+    </span>
+  );
+}
+
 const COPILOT_SUGGESTIONS = [
   "Add 2 museums",
   "More beach time",
@@ -138,6 +190,12 @@ const COPILOT_SUGGESTIONS = [
   "Slower pace",
   "More nightlife",
   "Family-friendly only",
+  "Add a walking tour",
+  "Swap one activity for something quieter",
+  "Make Day 2 less busy",
+  "More local / authentic spots",
+  "Add lunch recommendations",
+  "Remove the busiest day",
 ];
 
 type Step = "params" | "suggestions" | "universe";
@@ -152,7 +210,7 @@ function looksLikePlace(title: string): boolean {
   return true;
 }
 
-function buildGoogleMapsUrl(plan: PlanResponse): string {
+function buildGoogleMapsUrl(plan: PlanResponse, origin?: string): string {
   const region = plan.trip?.recommended_region?.trim() || "";
   const waypoints: string[] = [];
   plan.itinerary?.forEach((d) => {
@@ -167,11 +225,12 @@ function buildGoogleMapsUrl(plan: PlanResponse): string {
   if (uniq.length === 0) return "";
   const destination = encodeURIComponent(uniq.pop()!);
   const waypointsParam = uniq.length > 0 ? `&waypoints=${uniq.map((w) => encodeURIComponent(w)).join("|")}` : "";
-  return `https://www.google.com/maps/dir/?api=1&destination=${destination}${waypointsParam}`;
+  const originParam = origin?.trim() ? `&origin=${encodeURIComponent(origin)}` : "";
+  return `https://www.google.com/maps/dir/?api=1&destination=${destination}${waypointsParam}${originParam}`;
 }
 
-function GoogleMapsLink({ plan }: { plan: PlanResponse }) {
-  const url = buildGoogleMapsUrl(plan);
+function GoogleMapsLink({ plan, origin }: { plan: PlanResponse; origin?: string }) {
+  const url = buildGoogleMapsUrl(plan, origin);
   if (!url) return null;
   return (
     <a
@@ -206,19 +265,20 @@ function ParamsPage({
     <div className="hero-with-mesh -mx-6 -mt-6 min-h-[70vh] rounded-none border-0 bg-[var(--background)] px-8 py-24 sm:px-16 md:px-24 lg:px-32">
       <div className="mx-auto max-w-5xl">
         <h2 className="font-heading text-center text-4xl font-light tracking-[0.02em] text-[var(--foreground)] sm:text-5xl uppercase">
-          Design your trip
+          Shape your trip
         </h2>
         <p className="mt-8 text-center text-[17px] leading-relaxed text-[var(--muted)] max-w-2xl mx-auto">
-          Tell us your vibe, how long you’re away, and your budget. We’ll suggest three trip ideas—you can change anything later.
+          Tell us how you want to travel—we’ll shape trip ideas that match. Pick one and step into your itinerary. <em>Refine it as you like.</em>
         </p>
         <p className="mt-3 text-center text-[14px] text-[var(--muted)]/80 max-w-xl mx-auto">
-          No account needed to start. Fill in what you like and click the button below.
+          No account needed. Hover the (i) next to any field for a little more guidance.
         </p>
 
         <div className="mt-24 space-y-20">
           <div>
-            <label className="block text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--muted)]" htmlFor="vibes">
+            <label className="flex items-center text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--muted)]" htmlFor="vibes">
               Vibes / keywords
+              <InfoTooltip>Short mood and theme words <em>that steer suggestions</em> (e.g. relaxing, food, culture). We use them to match you with destinations and itineraries. Combine with Emphasis for specific activities.</InfoTooltip>
             </label>
             <p className="mt-1 text-[13px] text-[var(--muted)]/80">Words that describe the trip you want (e.g. relaxing, food, culture).</p>
             <textarea
@@ -233,8 +293,9 @@ function ParamsPage({
 
           <div className="grid gap-16 sm:grid-cols-2">
             <div>
-              <label className="block text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--muted)]">
+              <label className="flex items-center text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--muted)]">
                 Duration · <span className="text-[var(--foreground)]">{prefs.days}</span> days
+                <InfoTooltip text="Total trip length in days. We’ll split the itinerary across these days (morning / afternoon / evening blocks) and adjust density accordingly." />
               </label>
               <input
                 type="range"
@@ -247,8 +308,9 @@ function ParamsPage({
               />
             </div>
             <div>
-              <label className="block text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--muted)]">
+              <label className="flex items-center text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--muted)]">
                 Budget · <span className="text-[var(--foreground)]">{PRICINESS_LABELS[prefs.priciness - 1]}</span>
+                <InfoTooltip>1 = budget, 5 = splurge. Influences activities, accommodation and which destinations appear in Explore.</InfoTooltip>
               </label>
               <input
                 type="range"
@@ -263,8 +325,9 @@ function ParamsPage({
           </div>
 
           <div>
-            <label className="block text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--muted)]">
+            <label className="flex items-center text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--muted)]">
               Max one-way travel · <span className="text-[var(--foreground)]">{prefs.maxTravelTimeHours}h</span>
+              <InfoTooltip>Maximum one-way journey time from your origin. Destinations beyond this are hidden in Explore. Set to 24 to see all.</InfoTooltip>
             </label>
             <input
               type="range"
@@ -278,8 +341,9 @@ function ParamsPage({
           </div>
 
           <div>
-            <label className="block text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--muted)]" htmlFor="origin">
+            <label className="flex items-center text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--muted)]" htmlFor="origin">
               Origin (city or country)
+              <InfoTooltip>Your departure city or region. Used to filter by travel time in Explore and to build Google Maps routes.</InfoTooltip>
             </label>
             <input
               id="origin"
@@ -293,7 +357,9 @@ function ParamsPage({
 
           <div className="grid gap-16 sm:grid-cols-2">
             <div>
-              <label className="block text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--muted)]">Transport</label>
+              <label className="flex items-center text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--muted)]">Transport
+                <InfoTooltip>Preferred way to reach the destination (flight, train, etc.). Used to filter the Explore table. <em>Any</em> shows all.</InfoTooltip>
+              </label>
               <select
                 value={prefs.transportation}
                 onChange={(e) => setPrefs((p) => ({ ...p, transportation: e.target.value }))}
@@ -305,7 +371,9 @@ function ParamsPage({
               </select>
             </div>
             <div>
-              <label className="block text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--muted)]">Theme</label>
+              <label className="flex items-center text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--muted)]">Theme
+                <InfoTooltip>Optional trip type (honeymoon, family, solo). We’ll bias suggestions and pacing to match.</InfoTooltip>
+              </label>
               <select
                 value={prefs.theme}
                 onChange={(e) => setPrefs((p) => ({ ...p, theme: e.target.value }))}
@@ -319,21 +387,128 @@ function ParamsPage({
           </div>
 
           <div>
-            <label className="block text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--muted)]">Weather</label>
-            <select
-              value={prefs.weather}
-              onChange={(e) => setPrefs((p) => ({ ...p, weather: e.target.value }))}
-              className="mt-5 w-full rounded-lg border border-[var(--border)] bg-[var(--card)]/30 px-4 py-4 text-[18px] outline-none focus:border-[var(--accent)]"
-            >
-              {WEATHER_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
+            <label className="flex items-center text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--muted)]">
+              Trip structure
+              <InfoTooltip><em>Single</em> is one city or region. <em>Multi</em> is several stops (e.g. safari + beach, or city-hopping). This shapes day-by-day suggestions and logistics.</InfoTooltip>
+            </label>
+            <p className="mt-1 text-[13px] text-[var(--muted)]/80">One base or several stops (e.g. city only vs safari + beach).</p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:gap-4">
+              {TRIP_STRUCTURE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setPrefs((p) => ({ ...p, tripStructure: opt.value as "single" | "multi" }))}
+                  className={`rounded-xl border px-5 py-4 text-left transition-colors ${
+                    prefs.tripStructure === opt.value
+                      ? "border-[var(--accent)] bg-[var(--accent-soft)]/50 text-[var(--foreground)]"
+                      : "border-[var(--border)] text-[var(--muted)] hover:border-[var(--accent)]/50 hover:text-[var(--foreground)]"
+                  }`}
+                >
+                  <span className="block font-medium">{opt.label}</span>
+                  <span className="mt-0.5 block text-[12px] opacity-90">{opt.description}</span>
+                </button>
               ))}
-            </select>
+            </div>
           </div>
 
           <div>
-            <label className="block text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--muted)]">Emphasis</label>
-            <div className="mt-5 flex flex-wrap gap-3">
+            <label className="flex items-center text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--muted)]">
+              Weather
+              <InfoTooltip>Broad preference for temperature and rain. Expand <em>Add weather details</em> to set min/max temp, max rainfall or UV. We use this to filter destinations and tailor timing.</InfoTooltip>
+            </label>
+            <p className="mt-1 text-[13px] text-[var(--muted)]/80">Quick preference. Optionally add details below.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {WEATHER_OPTIONS.map((o) => (
+                <button
+                  key={o.value}
+                  type="button"
+                  onClick={() => setPrefs((p) => ({ ...p, weather: o.value }))}
+                  className={`rounded-full px-4 py-2.5 text-[14px] transition-colors ${
+                    prefs.weather === o.value
+                      ? "bg-[var(--accent)] text-[var(--card)]"
+                      : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
+                  }`}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            <details className="mt-4 group">
+              <summary className="cursor-pointer list-none text-[14px] text-[var(--muted)] hover:text-[var(--foreground)]">
+                Add weather details (optional)
+              </summary>
+              <div className="mt-3 grid gap-4 rounded-xl border border-[var(--border)] bg-[var(--card)]/30 p-4 sm:grid-cols-2">
+                <div>
+                  <label className="block text-[12px] text-[var(--muted)]">Min temp (°C)</label>
+                  <input
+                    type="number"
+                    min={-10}
+                    max={45}
+                    placeholder="Any"
+                    value={prefs.weatherDetail?.tempMinC ?? ""}
+                    onChange={(e) => setPrefs((p) => ({
+                      ...p,
+                      weatherDetail: { ...p.weatherDetail, tempMinC: e.target.value === "" ? undefined : Number(e.target.value) },
+                    }))}
+                    className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--card)]/50 px-3 py-2 text-[14px]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[12px] text-[var(--muted)]">Max temp (°C)</label>
+                  <input
+                    type="number"
+                    min={-10}
+                    max={45}
+                    placeholder="Any"
+                    value={prefs.weatherDetail?.tempMaxC ?? ""}
+                    onChange={(e) => setPrefs((p) => ({
+                      ...p,
+                      weatherDetail: { ...p.weatherDetail, tempMaxC: e.target.value === "" ? undefined : Number(e.target.value) },
+                    }))}
+                    className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--card)]/50 px-3 py-2 text-[14px]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[12px] text-[var(--muted)]">Max rainfall (mm)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={500}
+                    placeholder="Any"
+                    value={prefs.weatherDetail?.maxRainfallMm ?? ""}
+                    onChange={(e) => setPrefs((p) => ({
+                      ...p,
+                      weatherDetail: { ...p.weatherDetail, maxRainfallMm: e.target.value === "" ? undefined : Number(e.target.value) },
+                    }))}
+                    className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--card)]/50 px-3 py-2 text-[14px]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[12px] text-[var(--muted)]">Max UV index</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={11}
+                    placeholder="Any"
+                    value={prefs.weatherDetail?.maxUvIndex ?? ""}
+                    onChange={(e) => setPrefs((p) => ({
+                      ...p,
+                      weatherDetail: { ...p.weatherDetail, maxUvIndex: e.target.value === "" ? undefined : Number(e.target.value) },
+                    }))}
+                    className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--card)]/50 px-3 py-2 text-[14px]"
+                  />
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <div>
+            <label className="flex items-center text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--muted)]">
+              Emphasis
+              <InfoTooltip>Activity types to prioritise (museums, beaches, gastronomy). Distinct from Vibes and Trip story. Selecting several is fine. We’ll blend them into the itinerary.</InfoTooltip>
+            </label>
+            <p className="mt-1 text-[13px] text-[var(--muted)]/80">Types of experiences you want (optional).</p>
+            <div className="mt-3 flex flex-wrap gap-2">
               {EMPHASIS_OPTIONS.map((em) => {
                 const on = prefs.emphasis.includes(em);
                 return (
@@ -344,8 +519,8 @@ function ParamsPage({
                       ...p,
                       emphasis: on ? p.emphasis.filter((e) => e !== em) : [...p.emphasis, em],
                     }))}
-                    className={`rounded-lg px-5 py-2.5 text-[13px] transition-colors ${
-                      on ? "bg-[var(--accent)] text-[var(--card)]" : "text-[var(--muted)] hover:text-[var(--foreground)] border border-[var(--border)]"
+                    className={`rounded-full px-3.5 py-2 text-[13px] transition-colors ${
+                      on ? "bg-[var(--accent)] text-[var(--card)]" : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
                     }`}
                   >
                     {em}
@@ -356,22 +531,37 @@ function ParamsPage({
           </div>
 
           <div>
-            <label className="block text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--muted)]" htmlFor="constraints">
-              Constraints (e.g. wheelchair, dietary)
+            <label className="flex items-center text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--muted)]" htmlFor="constraints">
+              Constraints & accessibility
+              <InfoTooltip>Mobility, dietary or family needs. We use this to tailor activities and venue suggestions in your itinerary.</InfoTooltip>
             </label>
+            <p className="mt-1 text-[13px] text-[var(--muted)]/80">Add any requirements so we can tailor activities and suggestions. Click a tag below or type your own.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {CONSTRAINT_PRESETS.map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => setPrefs((p) => ({ ...p, constraints: p.constraints ? `${p.constraints}, ${preset.value}` : preset.value }))}
+                  className="rounded-full border border-[var(--border)] px-3.5 py-2 text-[13px] text-[var(--muted)] hover:border-[var(--accent)]/50 hover:text-[var(--foreground)]"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
             <input
               id="constraints"
               type="text"
               value={prefs.constraints}
               onChange={(e) => setPrefs((p) => ({ ...p, constraints: e.target.value }))}
-              placeholder="Optional"
-              className="mt-5 w-full rounded-lg border border-[var(--border)] bg-[var(--card)]/30 px-4 py-4 text-[18px] outline-none placeholder:text-[var(--muted)]/70 focus:border-[var(--accent)]"
+              placeholder="Or type your own (e.g. no stairs, quiet mornings)"
+              className="mt-3 w-full rounded-lg border border-[var(--border)] bg-[var(--card)]/30 px-4 py-4 text-[18px] outline-none placeholder:text-[var(--muted)]/70 focus:border-[var(--accent)]"
             />
           </div>
 
           <div className="border-t border-[var(--border)] pt-20">
-            <label className="block text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--muted)]" htmlFor="tripStory">
+            <label className="flex items-center text-[12px] font-medium uppercase tracking-[0.2em] text-[var(--muted)]" htmlFor="tripStory">
               Your trip in a few words
+              <InfoTooltip>Free-form context: first time in the country, special occasion, pace. We use this with your vibes and emphasis to shape your trip ideas.</InfoTooltip>
             </label>
             <p className="mt-2 text-[14px] text-[var(--muted)]">
               Any specific story, vibe, or preference we should keep in mind when designing your trip.
@@ -393,7 +583,7 @@ function ParamsPage({
           )}
 
           <div className="flex flex-col gap-4">
-            <p className="text-[13px] text-[var(--muted)]/80">We’ll suggest three different trips. Pick one to plan your days in detail.</p>
+            <p className="text-[13px] text-[var(--muted)]/80">We’ll propose trip ideas that fit. Choose one and we’ll build your days.</p>
             <button
               type="button"
               onClick={generate}
@@ -405,13 +595,13 @@ function ParamsPage({
             </button>
             {onExploreUniverses && (
               <>
-                <p className="text-[13px] text-[var(--muted)]/80">Prefer to choose a city first? Browse our list and we’ll build the itinerary for you.</p>
+                <p className="text-[13px] text-[var(--muted)]/80">Or start from a place you love—browse destinations and we’ll design the trip.</p>
                 <button
                   type="button"
                   onClick={onExploreUniverses}
                   className="w-full rounded-lg border border-[var(--border)] py-4 text-[14px] uppercase tracking-wider text-[var(--muted)] hover:text-[var(--foreground)]"
                 >
-                  Or explore universes
+                  Explore by destination
                 </button>
               </>
             )}
@@ -499,6 +689,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<Step>("params");
   const [suggestions, setSuggestions] = useState<PlanResponse[] | null>(null);
+  const [suggestionCategories, setSuggestionCategories] = useState<{ name: string; alternatives: PlanResponse[] }[]>([]);
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [universeTransition, setUniverseTransition] = useState<"idle" | "playing" | "done">("idle");
   const [selectedForUniverse, setSelectedForUniverse] = useState<PlanResponse | null>(null);
@@ -532,6 +723,9 @@ export default function Home() {
   const [destinationsLoading, setDestinationsLoading] = useState(false);
   const [destinationPlanLoading, setDestinationPlanLoading] = useState<string | null>(null);
   const [destinationsSort, setDestinationsSort] = useState<{ key: string; order: "asc" | "desc" }>({ key: "name", order: "asc" });
+  const [destinationsRegion, setDestinationsRegion] = useState<string>("all");
+  const [exploreDateFrom, setExploreDateFrom] = useState<string>("");
+  const [exploreDateTo, setExploreDateTo] = useState<string>("");
   const [alternativesOpen, setAlternativesOpen] = useState<{ blockId: string; location: string; type: Block["type"]; currentTitle: string } | null>(null);
   const [alternativesList, setAlternativesList] = useState<{ title: string; notes?: string; rating?: string }[]>([]);
   const [alternativesLoading, setAlternativesLoading] = useState(false);
@@ -580,6 +774,11 @@ export default function Home() {
     params.set("maxTravelTimeHours", String(prefs.maxTravelTimeHours));
     params.set("maxPriciness", String(prefs.priciness));
     if (prefs.transportation && prefs.transportation !== "any") params.set("travelMode", prefs.transportation);
+    if (prefs.weatherDetail?.maxRainfallMm != null) params.set("maxRainfall", String(prefs.weatherDetail.maxRainfallMm));
+    if (destinationsRegion && destinationsRegion !== "all") params.set("region", destinationsRegion);
+    if (prefs.origin?.trim()) params.set("origin", prefs.origin.trim());
+    if (exploreDateFrom) params.set("date_from", exploreDateFrom);
+    if (exploreDateTo) params.set("date_to", exploreDateTo);
     params.set("sortBy", destinationsSort.key);
     params.set("sortOrder", destinationsSort.order);
     fetch(`/api/destinations?${params}`)
@@ -587,7 +786,7 @@ export default function Home() {
       .then((data: { destinations?: Destination[] }) => setDestinations(Array.isArray(data.destinations) ? data.destinations : []))
       .catch(() => setDestinations([]))
       .finally(() => setDestinationsLoading(false));
-  }, [exploreOpen, prefs.maxTravelTimeHours, prefs.priciness, prefs.transportation, destinationsSort.key, destinationsSort.order]);
+  }, [exploreOpen, prefs.maxTravelTimeHours, prefs.priciness, prefs.transportation, prefs.weatherDetail?.maxRainfallMm, prefs.origin, destinationsRegion, exploreDateFrom, exploreDateTo, destinationsSort.key, destinationsSort.order]);
 
   async function enterUniverseFromDestination(dest: Destination) {
     setDestinationPlanLoading(dest.id);
@@ -682,6 +881,18 @@ export default function Home() {
     });
   }
 
+  function downloadJson() {
+    if (!plan) return;
+    const blob = new Blob([JSON.stringify(plan, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `trip-${plan.trip?.recommended_region ?? "itinerary"}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setExportOpen(false);
+  }
+
   function buildIcsBlob(startDate: string): string {
     if (!plan?.itinerary?.length || !startDate) return "";
     const date = new Date(startDate);
@@ -713,7 +924,7 @@ export default function Home() {
     return [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
-      "PRODID:-//Travel Planner//EN",
+      "PRODID:-//Atlas//EN",
       "CALSCALE:GREGORIAN",
       ...events,
       "END:VCALENDAR",
@@ -780,6 +991,13 @@ export default function Home() {
     if (!user) setSavedTrips([]);
   }, [user]);
 
+  useEffect(() => {
+    if (!authOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setAuthOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [authOpen]);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor)
@@ -789,6 +1007,9 @@ export default function Home() {
     if (!canGenerate) return;
     setLoading(true);
     setError(null);
+    setStep("suggestions");
+    setSuggestions(null);
+    setSuggestionCategories([]);
 
     try {
       const res = await fetch("/api/plan", {
@@ -802,10 +1023,12 @@ export default function Home() {
         throw new Error(text || `Request failed: ${res.status}`);
       }
 
-      const data = (await res.json()) as { alternatives?: PlanResponse[] };
-      const list = Array.isArray(data.alternatives) ? data.alternatives : [];
+      const data = (await res.json()) as { alternatives?: PlanResponse[]; categories?: { name: string; alternatives: PlanResponse[] }[] };
+      const categories = Array.isArray(data.categories) ? data.categories : [];
+      const list = Array.isArray(data.alternatives) ? data.alternatives : categories.flatMap((c) => c.alternatives || []);
       setLastUsedPrefs(prefs);
       setSuggestions(list);
+      setSuggestionCategories(categories.filter((c) => Array.isArray(c.alternatives) && c.alternatives.length > 0));
       setPlan(null);
       setStep("suggestions");
     } catch (e: unknown) {
@@ -828,6 +1051,7 @@ export default function Home() {
   function goToParams() {
     setStep("params");
     setSuggestions(null);
+    setSuggestionCategories([]);
     setPlan(null);
   }
 
@@ -837,11 +1061,12 @@ export default function Home() {
     const userMsg = message.trim();
     setCopilotMessages((m) => [...m, { role: "user", content: userMsg }]);
     setCopilotInput("");
+    const history = copilotMessages.slice(-4);
     try {
       const res = await fetch("/api/copilot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan, message: userMsg }),
+        body: JSON.stringify({ plan, message: userMsg, history }),
       });
       const data = res.ok ? (await res.json()) as { reply?: string; plan?: PlanResponse } : null;
       const reply = data?.reply ?? "I couldn’t process that. Try rephrasing.";
@@ -859,8 +1084,10 @@ export default function Home() {
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch("/api/trips", {
-        method: "POST",
+      const url = savedTripId ? `/api/trips/${savedTripId}` : "/api/trips";
+      const method = savedTripId ? "PATCH" : "POST";
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ payload: plan }),
       });
@@ -893,6 +1120,7 @@ export default function Home() {
       const payload = data.payload as PlanResponse;
       if (payload?.trip && Array.isArray(payload?.itinerary)) {
         setSuggestions(null);
+        setSuggestionCategories([]);
         setPlan(payload);
         setSavedTripId(id);
         setStep("universe");
@@ -976,6 +1204,15 @@ export default function Home() {
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
             </button>
           </div>
+          <details className="border-b border-[var(--border)] group" open={copilotMessages.length === 0}>
+            <summary className="cursor-pointer list-none px-5 py-3 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--muted-bg)]/50">
+              How to use
+            </summary>
+            <div className="px-5 pb-4 text-[13px] text-[var(--muted)] space-y-2">
+              <p>Tell the Copilot what you want—more museums, a slower day, a different restaurant. It rewrites your itinerary to match.</p>
+              <p>Tap a suggestion or type your own. One message, one refresh.</p>
+            </div>
+          </details>
           <div className="flex flex-wrap gap-2 border-b border-[var(--border)] p-3">
             {COPILOT_SUGGESTIONS.map((s) => (
               <button
@@ -991,7 +1228,7 @@ export default function Home() {
           </div>
           <div className="flex-1 overflow-y-auto p-3 space-y-3">
             {copilotMessages.length === 0 && (
-              <p className="text-sm text-[var(--muted)]">Click a suggestion or type your own (e.g. &quot;Add a food tour&quot; or &quot;Make it less busy&quot;). The AI will update your itinerary.</p>
+              <p className="text-sm text-[var(--muted)]">Ask for anything—we’ll adjust your plan and show the result here.</p>
             )}
             {copilotMessages.map((msg, i) => (
               <div
@@ -1032,16 +1269,24 @@ export default function Home() {
       <div className="mx-auto max-w-[1200px] px-6 py-14">
         <header className="mb-16 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="font-heading text-2xl font-light tracking-tight text-[var(--foreground)] sm:text-3xl">
-              Travel Planner
+            <h1 className="font-heading text-2xl font-light tracking-[0.15em] text-[var(--foreground)] sm:text-3xl uppercase">
+              Atlas
             </h1>
             <p className="mt-3 text-[15px] leading-relaxed text-[var(--muted)]">
-              Set your preferences, get three trip ideas, then plan your days. You can save, share, or export your itinerary anytime.
+              Plan the trip you'll love. Save, share, and export when you’re ready—or refine every detail with the AI Copilot.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {user ? (
               <>
+                <button
+                  type="button"
+                  onClick={() => { fetchTrips(); setMyTripsOpen(true); }}
+                  disabled={loadingTrips}
+                  className="rounded-lg border border-[var(--border)] px-4 py-2 text-[13px] text-[var(--muted)] hover:text-[var(--foreground)]"
+                >
+                  {loadingTrips ? "…" : "My trips"}
+                </button>
                 <span className="truncate max-w-[180px] text-[13px] text-[var(--muted)]" title={user.email}>{user.email}</span>
                 <button
                   type="button"
@@ -1075,13 +1320,45 @@ export default function Home() {
           </div>
         </header>
 
+        {/* Sticky step indicator */}
+        <nav aria-label="Progress" className="sticky top-0 z-20 -mx-6 mb-8 flex border-b border-[var(--border)] bg-[var(--card)]/95 px-6 py-3 backdrop-blur-sm">
+          <ol className="mx-auto flex w-full max-w-[1200px] items-center gap-2 sm:gap-4">
+            {[
+              { id: "params", label: "Parameters", step: "params" as const },
+              { id: "suggestions", label: "Suggestions", step: "suggestions" as const },
+              { id: "universe", label: "Your trip", step: "universe" as const },
+            ].map((item, i) => {
+              const isActive = step === item.step;
+              const isPast = (step === "suggestions" && item.step === "params") || (step === "universe" && item.step !== "universe");
+              return (
+                <li key={item.id} className="flex flex-1 items-center">
+                  <span className={`flex min-w-[44px] items-center justify-center rounded-full py-1.5 text-[12px] font-medium sm:min-w-[28px] sm:px-0 ${isActive ? "bg-[var(--accent)] text-[var(--card)]" : isPast ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "bg-[var(--muted-bg)] text-[var(--muted)]"}`}>
+                    {i + 1}
+                  </span>
+                  <span className={`ml-2 hidden text-[13px] sm:inline ${isActive ? "font-medium text-[var(--foreground)]" : "text-[var(--muted)]"}`}>{item.label}</span>
+                  {i < 2 && <span className="ml-2 flex-1 border-t border-[var(--border)] sm:ml-4" aria-hidden />}
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
+
         {authOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] p-4" aria-modal="true" role="dialog">
-            <div className="w-full max-w-sm rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
-              <h3 className="font-heading text-xl font-medium text-[var(--foreground)]">{authMode === "signin" ? "Sign in" : "Create account"}</h3>
-              <p className="mt-1 text-[13px] text-[var(--muted)]">Create an account to save your trips and share them by link. You can skip and keep planning without signing in.</p>
+          <div
+            className="atlas-modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] p-4"
+            aria-modal="true"
+            role="dialog"
+            aria-labelledby="auth-dialog-title"
+          >
+            <div className="atlas-modal-panel w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-8 shadow-xl">
+              <h3 id="auth-dialog-title" className="font-heading text-2xl font-semibold tracking-tight text-[var(--foreground)]">{authMode === "signin" ? "Sign in" : "Create account"}</h3>
+              <ul className="mt-4 space-y-2 text-[14px] text-[var(--muted)]">
+                <li className="flex items-center gap-2"><span className="text-[var(--accent)]">·</span> Save trips to your account and access them from any device</li>
+                <li className="flex items-center gap-2"><span className="text-[var(--accent)]">·</span> Share a link so others can view or collaborate on your itinerary</li>
+                <li className="flex items-center gap-2"><span className="text-[var(--accent)]">·</span> Keep a history of your plans and drafts in one place</li>
+              </ul>
               <form
-                className="mt-4 space-y-3"
+                className="mt-6 space-y-4"
                 onSubmit={async (e) => {
                   e.preventDefault();
                   setAuthLoading(true);
@@ -1100,46 +1377,82 @@ export default function Home() {
                     setAuthEmail("");
                     setAuthPassword("");
                   } catch (err: unknown) {
-                    setAuthError(err instanceof Error ? err.message : "Something went wrong");
+                    const msg = err instanceof Error ? err.message : "Something went wrong";
+                    setAuthError(msg.includes("Invalid login") ? "Invalid email or password." : msg);
                   } finally {
                     setAuthLoading(false);
                   }
                 }}
               >
-                <input
-                  type="email"
-                  placeholder="Email"
-                  value={authEmail}
-                  onChange={(e) => setAuthEmail(e.target.value)}
-                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--muted-bg)]/30 px-3 py-2.5 text-[14px] outline-none focus:border-[var(--accent)]"
-                  required
-                />
-                <input
-                  type="password"
-                  placeholder="Password"
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--muted-bg)]/30 px-3 py-2.5 text-[14px] outline-none focus:border-[var(--accent)]"
-                  required
-                />
+                <label className="block">
+                  <span className="text-[12px] font-medium uppercase tracking-wider text-[var(--muted)]">Email</span>
+                  <input
+                    type="email"
+                    placeholder="you@example.com"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--muted-bg)]/30 px-4 py-3 text-[15px] outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]/30"
+                    required
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[12px] font-medium uppercase tracking-wider text-[var(--muted)]">Password</span>
+                  <input
+                    type="password"
+                    placeholder="••••••••"
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--muted-bg)]/30 px-4 py-3 text-[15px] outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]/30"
+                    required
+                  />
+                </label>
+                {authMode === "signin" && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!authEmail.trim()) { setAuthError("Enter your email first."); return; }
+                      setAuthLoading(true);
+                      setAuthError(null);
+                      const supabase = createSupabaseClient();
+                      if (!supabase) { setAuthLoading(false); return; }
+                      const { error } = await supabase.auth.resetPasswordForEmail(authEmail, { redirectTo: `${typeof window !== "undefined" ? window.location.origin : ""}/auth/callback` });
+                      setAuthLoading(false);
+                      setAuthError(error ? error.message : "Check your email for a reset link.");
+                    }}
+                    disabled={authLoading}
+                    className="text-[13px] text-[var(--accent)] hover:underline disabled:opacity-50"
+                  >
+                    Forgot password?
+                  </button>
+                )}
                 {authError && <p className="text-[13px] text-[var(--error)]">{authError}</p>}
-                <div className="flex gap-2">
+                <div className="flex gap-3 pt-1">
                   <button
                     type="submit"
                     disabled={authLoading}
-                    className="flex-1 rounded-lg border border-[var(--accent)] bg-[var(--accent)] py-2.5 text-[13px] font-medium text-[var(--card)] disabled:opacity-50"
+                    className="flex-1 rounded-lg border border-[var(--accent)] bg-[var(--accent)] py-3 text-[14px] font-medium text-[var(--card)] shadow-sm hover:opacity-90 disabled:opacity-50"
                   >
                     {authLoading ? "…" : authMode === "signin" ? "Sign in" : "Create account"}
                   </button>
                   <button
                     type="button"
                     onClick={() => { setAuthOpen(false); setAuthError(null); }}
-                    className="rounded-lg border border-[var(--border)] px-4 py-2.5 text-[13px] text-[var(--muted)] hover:text-[var(--foreground)]"
+                    className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-5 py-3 text-[14px] text-[var(--muted)] hover:text-[var(--foreground)]"
                   >
                     Cancel
                   </button>
                 </div>
               </form>
+              <p className="mt-4 text-center text-[13px] text-[var(--muted)]">
+                {authMode === "signin" ? "Don’t have an account? " : "Already have an account? "}
+                <button
+                  type="button"
+                  onClick={() => { setAuthMode(authMode === "signin" ? "signup" : "signin"); setAuthError(null); }}
+                  className="font-medium text-[var(--accent)] hover:underline"
+                >
+                  {authMode === "signin" ? "Create one" : "Sign in"}
+                </button>
+              </p>
             </div>
           </div>
         )}
@@ -1148,7 +1461,7 @@ export default function Home() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] p-4" aria-modal="true" role="dialog">
             <div className="w-full max-w-sm rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
               <h3 className="font-heading text-xl font-medium text-[var(--foreground)]">Share this trip</h3>
-              <p className="mt-1 text-[13px] text-[var(--muted)]">Create a link and send it. The recipient can view the trip (viewer) or edit it (editor).</p>
+              <p className="mt-1 text-[13px] text-[var(--muted)]">Share a link—they can view or edit. Any changes they make sync to your trip.</p>
               {!shareUrl ? (
                 <form
                   className="mt-4 space-y-3"
@@ -1231,6 +1544,65 @@ export default function Home() {
           </div>
         )}
 
+        {myTripsOpen && user && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] p-4" aria-modal="true" role="dialog">
+            <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-xl">
+              <div className="flex items-center justify-between border-b border-[var(--border)] px-6 py-4">
+                <h3 className="font-heading text-xl font-semibold tracking-tight text-[var(--foreground)]">Your trips</h3>
+                <button type="button" onClick={() => setMyTripsOpen(false)} className="rounded-lg p-2 text-[var(--muted)] hover:bg-[var(--muted-bg)]" aria-label="Close">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto p-6">
+                {loadingTrips ? (
+                  <div className="flex items-center justify-center py-16 text-[var(--muted)]">Loading your trips…</div>
+                ) : savedTrips.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--muted-bg)]/20 py-16 text-center">
+                    <p className="text-[15px] text-[var(--foreground)]">No saved trips yet</p>
+                    <p className="mt-2 text-[14px] text-[var(--muted)]">Save a trip and it appears here—ready to open or share from any device.</p>
+                    <button type="button" onClick={() => { setMyTripsOpen(false); setStep("params"); }} className="mt-6 rounded-lg border border-[var(--accent)] bg-[var(--accent)] px-6 py-2.5 text-[14px] font-medium text-[var(--card)] hover:opacity-90">Start planning</button>
+                  </div>
+                ) : (
+                  <ul className="space-y-4">
+                    {savedTrips.map((t) => {
+                      const p = t.payload as PlanResponse;
+                      const title = p?.trip?.title ?? p?.trip?.recommended_region ?? "Untitled trip";
+                      const region = p?.trip?.recommended_region ?? "";
+                      return (
+                        <li key={t.id} className="flex flex-col gap-3 rounded-xl border border-[var(--border)] bg-[var(--muted-bg)]/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium text-[var(--foreground)]">{title}</p>
+                            {region && <p className="mt-0.5 text-[13px] text-[var(--muted)]">{region}</p>}
+                            <p className="mt-1 text-[12px] text-[var(--muted)]">Updated {new Date(t.updated_at).toLocaleDateString(undefined, { dateStyle: "medium" })}</p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <button type="button" onClick={() => { loadTrip(t.id); setMyTripsOpen(false); }} className="rounded-lg border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 text-[13px] font-medium text-[var(--card)] hover:opacity-90">Open</button>
+                            <button type="button" onClick={() => { setSavedTripId(t.id); setMyTripsOpen(false); setShareOpen(true); setShareUrl(null); }} className="rounded-lg border border-[var(--border)] px-4 py-2 text-[13px] text-[var(--muted)] hover:text-[var(--foreground)]">Share</button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!confirm("Remove this trip from your account? This can't be undone.")) return;
+                                const res = await fetch(`/api/trips/${t.id}`, { method: "DELETE" });
+                                if (res.ok) {
+                                  if (savedTripId === t.id) { setSavedTripId(null); setPlan(null); setStep("suggestions"); }
+                                  await fetchTrips();
+                                }
+                              }}
+                              className="rounded-lg border border-[var(--border)] px-4 py-2 text-[13px] text-[var(--muted)] hover:text-[var(--error)]"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {step === "params" && (
           <ParamsPage
             prefs={prefs}
@@ -1241,6 +1613,7 @@ export default function Home() {
             generate={generate}
             onExploreUniverses={() => {
               setSuggestions(null);
+              setSuggestionCategories([]);
               setStep("suggestions");
               setExploreOpen(true);
             }}
@@ -1249,9 +1622,32 @@ export default function Home() {
 
         {step === "suggestions" && (
           <div>
-            {(!suggestions || suggestions.length === 0) ? (
+            {loading ? (
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--card)]/30 p-12">
+                <div className="flex flex-col items-center justify-center gap-6">
+                  <div className="h-10 w-10 animate-spin rounded-full border-2 border-[var(--border)] border-t-[var(--accent)]" aria-hidden />
+                  <p className="text-[15px] font-medium text-[var(--foreground)]">Preparing your trips…</p>
+                  <p className="text-[13px] text-[var(--muted)]">We’re matching destinations and building day-by-day ideas. This usually takes a moment.</p>
+                </div>
+                <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  {[1, 2, 3, 4, 5, 6].map((i) => (
+                    <div key={i} className="flex flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--muted-bg)]/30">
+                      <div className="h-44 animate-pulse bg-[var(--border)]/40" />
+                      <div className="flex flex-1 flex-col p-5">
+                        <div className="h-5 w-3/4 animate-pulse rounded bg-[var(--border)]/40" />
+                        <div className="mt-2 h-4 w-1/2 animate-pulse rounded bg-[var(--border)]/30" />
+                        <div className="mt-4 space-y-2">
+                          <div className="h-3 w-full animate-pulse rounded bg-[var(--border)]/30" />
+                          <div className="h-3 w-4/5 animate-pulse rounded bg-[var(--border)]/30" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (!suggestions || suggestions.length === 0) ? (
               <div className="rounded-xl border border-[var(--border)] p-16 text-center">
-                <p className="text-[var(--muted)]">No trip ideas yet. Get three AI suggestions or browse destinations by your parameters.</p>
+                <p className="text-[var(--muted)]">Your trip ideas will appear here. Generate some from the form above, or explore by destination first.</p>
                 <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
                   <button
                     type="button"
@@ -1289,14 +1685,29 @@ export default function Home() {
             </div>
             <div className="hero-with-mesh relative overflow-hidden rounded-xl border border-[var(--border)] p-12 text-center">
               <h2 className="font-heading text-2xl font-light text-[var(--foreground)] sm:text-3xl">Your trip ideas</h2>
-              <p className="mt-4 text-[15px] leading-relaxed text-[var(--muted)]">Click a card to plan that trip day by day. Or open the table to pick any city and we’ll build the plan for you.</p>
-              <p className="mt-2 text-[13px] text-[var(--muted)]/80">You can go back and change your parameters anytime.</p>
+              <p className="mt-4 text-[15px] leading-relaxed text-[var(--muted)]">Choose a trip and we’ll open your day-by-day plan. Or browse the table and pick any city—we’ll build the itinerary.</p>
+              <p className="mt-2 text-[13px] text-[var(--muted)]/80">Change your parameters anytime and generate again.</p>
             </div>
-            <div className="mt-10 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
-              {suggestions.map((alt, i) => (
-                <SuggestionCard key={i} alternative={alt} onSelect={() => selectTrip(alt)} />
-              ))}
-            </div>
+            {suggestionCategories.length > 0 ? (
+              <div className="mt-12 space-y-14">
+                {suggestionCategories.map((cat) => (
+                  <section key={cat.name}>
+                    <h3 className="font-heading text-lg font-medium text-[var(--foreground)] mb-6">{cat.name}</h3>
+                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                      {cat.alternatives.map((alt, i) => (
+                        <SuggestionCard key={`${cat.name}-${i}`} alternative={alt} onSelect={() => selectTrip(alt)} />
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-10 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
+                {suggestions.map((alt, i) => (
+                  <SuggestionCard key={i} alternative={alt} onSelect={() => selectTrip(alt)} />
+                ))}
+              </div>
+            )}
               </>
             )}
           </div>
@@ -1316,49 +1727,141 @@ export default function Home() {
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
                 </button>
               </div>
-              <p className="border-b border-[var(--border)] px-6 py-3 text-[13px] text-[var(--muted)]">
-                Cities that match your travel time and budget. Click a column header to sort. Click &quot;Enter trip universe&quot; on a row and we’ll create your day-by-day itinerary for that city.
-              </p>
+              <div className="border-b border-[var(--border)] px-6 py-4">
+                <p className="mb-3 text-[13px] text-[var(--muted)]">
+                  Filter by departure, travel time, region, and rainfall. Hover column headers for details. Pick a destination and hit &quot;Enter trip universe&quot; to build your itinerary.
+                </p>
+                <div className="flex flex-wrap items-center gap-4">
+                  <label className="flex items-center gap-2">
+                    <span className="text-[13px] text-[var(--muted)]">Departure city</span>
+                    <input
+                      type="text"
+                      value={prefs.origin}
+                      onChange={(e) => setPrefs((p) => ({ ...p, origin: e.target.value.trim() }))}
+                      placeholder="e.g. London"
+                      className="w-36 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-[14px] text-[var(--foreground)] placeholder:text-[var(--muted)]"
+                    />
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <span className="text-[13px] text-[var(--muted)]">Max travel (h)</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={24}
+                      value={prefs.maxTravelTimeHours}
+                      onChange={(e) => setPrefs((p) => ({ ...p, maxTravelTimeHours: Math.max(0, Math.min(24, Number(e.target.value) || 0)) }))}
+                      className="w-16 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-[14px] text-[var(--foreground)]"
+                    />
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <span className="text-[13px] text-[var(--muted)]">Max rainfall (mm)</span>
+                    <input
+                      type="number"
+                      min={0}
+                      placeholder="Any"
+                      value={prefs.weatherDetail?.maxRainfallMm ?? ""}
+                      onChange={(e) => {
+                        const v = e.target.value === "" ? undefined : Math.max(0, Number(e.target.value) || 0);
+                        setPrefs((p) => ({ ...p, weatherDetail: { ...p.weatherDetail, maxRainfallMm: v } }));
+                      }}
+                      className="w-20 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-[14px] text-[var(--foreground)] placeholder:text-[var(--muted)]"
+                    />
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <span className="text-[13px] text-[var(--muted)]">Region</span>
+                    <select
+                      value={destinationsRegion}
+                      onChange={(e) => setDestinationsRegion(e.target.value)}
+                      className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-[14px] text-[var(--foreground)]"
+                    >
+                      <option value="all">All</option>
+                      <option value="Europe">Europe</option>
+                      <option value="Asia">Asia</option>
+                      <option value="Americas">Americas</option>
+                      <option value="Africa">Africa</option>
+                      <option value="Oceania">Oceania</option>
+                      <option value="Middle East">Middle East</option>
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <span className="text-[13px] text-[var(--muted)]">Weather from</span>
+                    <input
+                      type="date"
+                      value={exploreDateFrom}
+                      onChange={(e) => setExploreDateFrom(e.target.value)}
+                      className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-[14px] text-[var(--foreground)]"
+                    />
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <span className="text-[13px] text-[var(--muted)]">to</span>
+                    <input
+                      type="date"
+                      value={exploreDateTo}
+                      onChange={(e) => setExploreDateTo(e.target.value)}
+                      className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-[14px] text-[var(--foreground)]"
+                    />
+                  </label>
+                </div>
+                <p className="mt-1 text-[11px] text-[var(--muted)]">Optional: set dates to see temperature and rainfall for your trip period (sourced from climate data).</p>
+              </div>
               <div className="min-h-0 flex-1 overflow-auto">
                 {destinationsLoading ? (
                   <div className="flex items-center justify-center p-12 text-[var(--muted)]">Loading destinations…</div>
                 ) : (
-                  <table className="w-full text-left text-[14px]">
+                  <div className="overflow-x-auto">
+                <table className="w-full min-w-[900px] text-left text-[14px]">
                     <thead className="sticky top-0 z-10 border-b border-[var(--border)] bg-[var(--muted-bg)]/80">
                       <tr>
                         {[
-                          { key: "name", label: "City" },
-                          { key: "country", label: "Country" },
-                          { key: "travelTimeHours", label: "Travel (h)" },
-                          { key: "avgTempC", label: "°C" },
-                          { key: "avgRainfallMm", label: "Rain" },
-                          { key: "beautyScore", label: "Beauty" },
-                          { key: "cultureScore", label: "Culture" },
-                          { key: "pricinessScore", label: "Price" },
-                        ].map(({ key, label }) => (
+                          { key: "name", label: "City", tooltip: "Destination city name" },
+                          { key: "country", label: "Country", tooltip: "Country" },
+                          { key: "region", label: "Region", tooltip: "Continent or region" },
+                          { key: "distanceKm", label: "Dist (km)", tooltip: "Distance from your departure city (when set)" },
+                          { key: "travelTimeHours", label: "Travel (h)", tooltip: "One-way travel time in hours from your departure city (approximate)" },
+                          { key: "avgTempC", label: "°C", tooltip: "Average temperature in Celsius for the period" },
+                          { key: "avgRainfallMm", label: "Rain (mm)", tooltip: "Average rainfall in millimetres per month" },
+                          { key: "beautyScore", label: "Beauty", tooltip: "Scenery and beauty score from 1 (low) to 5 (high)" },
+                          { key: "cultureScore", label: "Culture", tooltip: "Culture and history score from 1 to 5" },
+                          { key: "safetyScore", label: "Safety", tooltip: "Safety and kid-friendly score from 1 to 5" },
+                          { key: "foodScore", label: "Food", tooltip: "Food and dining scene score from 1 to 5" },
+                          { key: "partyScore", label: "Nightlife", tooltip: "Nightlife and vibe score from 1 to 5" },
+                          { key: "relaxScore", label: "Relax", tooltip: "Serenity and relaxation vs energetic (1–5)" },
+                          { key: "beachAccessScore", label: "Beach", tooltip: "Access to beach and coastal quality (1–5)" },
+                          { key: "familyScore", label: "Family", tooltip: "Family-friendly score from 1 to 5" },
+                          { key: "pricinessScore", label: "Price", tooltip: "Priciness: 1 = budget, 5 = splurge" },
+                        ].map(({ key, label, tooltip }) => (
                           <th
                             key={key}
-                            className="cursor-pointer whitespace-nowrap px-4 py-3 font-medium text-[var(--muted)] hover:text-[var(--foreground)]"
-                            onClick={() => setDestinationsSort((s) => ({ key, order: s.key === key && s.order === "asc" ? "desc" : "asc" }))}
+                            title={tooltip}
+                            className="cursor-pointer whitespace-nowrap px-3 py-3 font-medium text-[var(--muted)] hover:text-[var(--foreground)]"
+                            onClick={() => setDestinationsSort((s) => ({ key: key as typeof destinationsSort.key, order: s.key === key && s.order === "asc" ? "desc" : "asc" }))}
                           >
                             {label} {destinationsSort.key === key ? (destinationsSort.order === "asc" ? "↑" : "↓") : ""}
                           </th>
                         ))}
-                        <th className="w-40 px-4 py-3 font-medium text-[var(--muted)]">Action</th>
+                        <th className="w-40 shrink-0 px-4 py-3 font-medium text-[var(--muted)]">Action</th>
                       </tr>
                     </thead>
                     <tbody>
                       {destinations.map((d) => (
                         <tr key={d.id} className="border-b border-[var(--border)] hover:bg-[var(--muted-bg)]/30">
-                          <td className="px-4 py-3 font-medium text-[var(--foreground)]">{d.name}</td>
-                          <td className="px-4 py-3 text-[var(--muted)]">{d.country}</td>
-                          <td className="px-4 py-3 text-[var(--muted)]">{d.travelTimeHours}</td>
-                          <td className="px-4 py-3 text-[var(--muted)]">{d.avgTempC}</td>
-                          <td className="px-4 py-3 text-[var(--muted)]">{d.avgRainfallMm}</td>
-                          <td className="px-4 py-3 text-[var(--muted)]">{d.beautyScore}</td>
-                          <td className="px-4 py-3 text-[var(--muted)]">{d.cultureScore}</td>
-                          <td className="px-4 py-3 text-[var(--muted)]">{d.pricinessScore}</td>
-                          <td className="px-4 py-3">
+                          <td className="px-3 py-3 font-medium text-[var(--foreground)]">{d.name}</td>
+                          <td className="px-3 py-3 text-[var(--muted)]">{d.country}</td>
+                          <td className="px-3 py-3 text-[var(--muted)]">{d.region ?? "—"}</td>
+                          <td className="px-3 py-3 text-[var(--muted)]">{d.distanceKm != null ? d.distanceKm : "—"}</td>
+                          <td className="px-3 py-3 text-[var(--muted)]">{d.travelTimeHours}</td>
+                          <td className="px-3 py-3 text-[var(--muted)]">{d.avgTempC}</td>
+                          <td className="px-3 py-3 text-[var(--muted)]">{d.avgRainfallMm}</td>
+                          <td className="px-3 py-3 text-[var(--muted)]">{d.beautyScore}</td>
+                          <td className="px-3 py-3 text-[var(--muted)]">{d.cultureScore}</td>
+                          <td className="px-3 py-3 text-[var(--muted)]">{d.safetyScore}</td>
+                          <td className="px-3 py-3 text-[var(--muted)]">{d.foodScore ?? "—"}</td>
+                          <td className="px-3 py-3 text-[var(--muted)]">{d.partyScore}</td>
+                          <td className="px-3 py-3 text-[var(--muted)]">{d.relaxScore ?? "—"}</td>
+                          <td className="px-3 py-3 text-[var(--muted)]">{d.beachAccessScore ?? "—"}</td>
+                          <td className="px-3 py-3 text-[var(--muted)]">{d.familyScore ?? "—"}</td>
+                          <td className="px-3 py-3 text-[var(--muted)]">{d.pricinessScore}</td>
+                          <td className="px-3 py-3">
                             <button
                               type="button"
                               disabled={destinationPlanLoading !== null}
@@ -1372,6 +1875,7 @@ export default function Home() {
                       ))}
                     </tbody>
                   </table>
+                </div>
                 )}
                 {!destinationsLoading && destinations.length === 0 && (
                   <div className="p-12 text-center text-[var(--muted)]">No destinations match your filters. Try relaxing travel time or budget.</div>
@@ -1424,28 +1928,28 @@ export default function Home() {
 
         {calendarModalOpen && plan && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] p-4" aria-modal="true" role="dialog">
-            <div className="w-full max-w-sm rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
-              <h3 className="font-heading text-lg font-medium text-[var(--foreground)]">Add to calendar</h3>
-              <p className="mt-1 text-[13px] text-[var(--muted)]">Choose the start date of your trip. We’ll create a .ics file you can open in Outlook, Apple Calendar, or Google Calendar.</p>
-              <label className="mt-4 block text-[12px] font-medium uppercase tracking-wider text-[var(--muted)]">Trip start date</label>
+            <div className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-xl">
+              <h3 className="font-heading text-lg font-semibold tracking-tight text-[var(--foreground)]">Add to calendar</h3>
+              <p className="mt-2 text-[14px] text-[var(--muted)]">Set your trip start date. We’ll generate an .ics file compatible with Outlook, Apple Calendar, and Google Calendar.</p>
+              <label className="mt-5 block text-[11px] font-semibold uppercase tracking-widest text-[var(--muted)]">Trip start date</label>
               <input
                 type="date"
                 value={calendarStartDate || new Date().toISOString().slice(0, 10)}
                 onChange={(e) => setCalendarStartDate(e.target.value)}
-                className="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--muted-bg)]/30 px-3 py-2.5 text-[14px] outline-none focus:border-[var(--accent)]"
+                className="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--muted-bg)]/40 px-4 py-3 text-[15px] outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]/30"
               />
-              <div className="mt-6 flex gap-2">
+              <div className="mt-6 flex gap-3">
                 <button
                   type="button"
                   onClick={downloadCalendar}
-                  className="flex-1 rounded-lg border border-[var(--accent)] bg-[var(--accent)] py-2.5 text-[13px] font-medium text-[var(--card)]"
+                  className="flex-1 rounded-lg border border-[var(--accent)] bg-[var(--accent)] py-3 text-[14px] font-medium text-[var(--card)] shadow-sm hover:opacity-90"
                 >
                   Download .ics
                 </button>
                 <button
                   type="button"
                   onClick={() => setCalendarModalOpen(false)}
-                  className="rounded-lg border border-[var(--border)] px-4 py-2.5 text-[13px] text-[var(--muted)] hover:text-[var(--foreground)]"
+                  className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-[14px] text-[var(--muted)] hover:text-[var(--foreground)]"
                 >
                   Cancel
                 </button>
@@ -1456,64 +1960,66 @@ export default function Home() {
 
         {reportOpen && plan && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] p-4" aria-modal="true" role="dialog">
-            <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-xl border border-[var(--border)] bg-[var(--card)]">
-              <div className="flex items-center justify-between border-b border-[var(--border)] px-6 py-4">
-                <h3 className="font-heading text-xl font-medium text-[var(--foreground)]">Trip report</h3>
+            <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-xl">
+              <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--muted-bg)]/30 px-6 py-4">
+                <h3 className="font-heading text-xl font-semibold tracking-tight text-[var(--foreground)]">Trip report</h3>
                 <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => window.print()}
-                    className="rounded-lg border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 text-[13px] font-medium text-[var(--card)]"
+                    className="rounded-lg border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 text-[13px] font-medium text-[var(--card)] shadow-sm hover:opacity-90"
                   >
                     Print or save as PDF
                   </button>
                   <button
                     type="button"
                     onClick={() => setReportOpen(false)}
-                    className="rounded-lg border border-[var(--border)] px-4 py-2 text-[13px] text-[var(--muted)] hover:text-[var(--foreground)]"
+                    className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-[13px] text-[var(--muted)] hover:text-[var(--foreground)]"
                   >
                     Close
                   </button>
                 </div>
               </div>
-              <p className="border-b border-[var(--border)] px-6 py-2 text-[13px] text-[var(--muted)]">
-                Use your browser’s Print button above, then choose &quot;Save as PDF&quot; to download.
+              <p className="border-b border-[var(--border)] px-6 py-2.5 text-[12px] uppercase tracking-wider text-[var(--muted)]">
+                Use Print → Save as PDF for a clean copy.
               </p>
-              <div id="trip-report-printable" className="overflow-y-auto p-6 text-[14px] leading-relaxed prose prose-sm max-w-none">
-                <div className="font-heading text-2xl text-[var(--foreground)]">{plan.trip.recommended_region}</div>
-                <p className="mt-1 italic text-[var(--muted)]">{plan.trip.title}</p>
-                <p className="mt-4">{plan.trip.summary}</p>
-                <p className="mt-2 text-[13px] text-[var(--muted)]">{plan.trip.best_season} · {plan.trip.pace}{plan.trip.vibe_tags?.length ? ` · ${plan.trip.vibe_tags.join(", ")}` : ""}</p>
+              <div id="trip-report-printable" className="overflow-y-auto p-8 text-[15px] leading-relaxed max-w-none">
+                <div className="border-b border-[var(--border)] pb-6">
+                  <h1 className="font-heading text-2xl font-semibold tracking-tight text-[var(--foreground)]">{plan.trip.recommended_region}</h1>
+                  <p className="mt-2 text-lg italic text-[var(--muted)]">{plan.trip.title}</p>
+                  <p className="mt-4 text-[var(--foreground)]/90">{plan.trip.summary}</p>
+                  <p className="mt-3 text-[13px] text-[var(--muted)]">{plan.trip.best_season} · {plan.trip.pace}{plan.trip.vibe_tags?.length ? ` · ${plan.trip.vibe_tags.join(", ")}` : ""}</p>
+                </div>
                 {lastUsedPrefs && (
-                  <div className="mt-8">
-                    <h4 className="font-heading text-sm font-medium uppercase tracking-wider text-[var(--muted)]">Parameters</h4>
-                    <ul className="mt-2 list-inside list-disc text-[13px] text-[var(--muted)]">
-                      <li>Vibes: {lastUsedPrefs.vibes}</li>
-                      <li>{lastUsedPrefs.days} days · {PRICINESS_LABELS[lastUsedPrefs.priciness - 1]}</li>
-                      {lastUsedPrefs.origin && <li>Origin: {lastUsedPrefs.origin}</li>}
-                      {lastUsedPrefs.tripStory && <li>Notes: {lastUsedPrefs.tripStory}</li>}
+                  <div className="mt-6 border-b border-[var(--border)] pb-6">
+                    <h2 className="font-heading text-xs font-semibold uppercase tracking-widest text-[var(--muted)]">Parameters</h2>
+                    <ul className="mt-3 space-y-1 text-[14px] text-[var(--muted)]">
+                      <li><span className="text-[var(--foreground)]">Vibes:</span> {lastUsedPrefs.vibes}</li>
+                      <li><span className="text-[var(--foreground)]">{lastUsedPrefs.days} days</span> · {PRICINESS_LABELS[lastUsedPrefs.priciness - 1]}</li>
+                      {lastUsedPrefs.origin && <li><span className="text-[var(--foreground)]">Origin:</span> {lastUsedPrefs.origin}</li>}
+                      {lastUsedPrefs.tripStory && <li><span className="text-[var(--foreground)]">Notes:</span> {lastUsedPrefs.tripStory}</li>}
                     </ul>
                   </div>
                 )}
-                <div className="mt-8">
-                  <h4 className="font-heading text-sm font-medium uppercase tracking-wider text-[var(--muted)]">Itinerary</h4>
+                <div className="mt-6">
+                  <h2 className="font-heading text-xs font-semibold uppercase tracking-widest text-[var(--muted)]">Itinerary</h2>
                   {plan.itinerary?.map((d) => (
-                    <div key={d.day} className="mt-4 border-b border-[var(--border)] pb-4">
-                      <p className="font-medium text-[var(--foreground)]">Day {d.day}: {d.base_location}</p>
-                      <ul className="mt-2 space-y-1 text-[13px] text-[var(--muted)]">
+                    <div key={d.day} className="mt-4 rounded-lg border border-[var(--border)]/60 bg-[var(--muted-bg)]/20 p-4">
+                      <p className="font-semibold text-[var(--foreground)]">Day {d.day}: {d.base_location}</p>
+                      <ul className="mt-3 space-y-2 text-[14px] text-[var(--muted)]">
                         {d.blocks.map((b) => (
-                          <li key={b.id}>
-                            {b.time === "morning" ? "AM" : b.time === "afternoon" ? "PM" : "Eve"} — {b.title}
-                            {b.notes ? ` — ${b.notes}` : ""}
+                          <li key={b.id} className="flex gap-2">
+                            <span className="shrink-0 w-8 text-[var(--foreground)]/70">{b.time === "morning" ? "AM" : b.time === "afternoon" ? "PM" : "Eve"}</span>
+                            <span><strong className="text-[var(--foreground)]">{b.title}</strong>{b.notes ? ` — ${b.notes}` : ""}</span>
                           </li>
                         ))}
                       </ul>
                     </div>
                   ))}
                 </div>
-                {buildGoogleMapsUrl(plan) && (
+                {buildGoogleMapsUrl(plan, lastUsedPrefs?.origin) && (
                   <p className="mt-6 text-[13px] text-[var(--muted)]">
-                    Map: <a href={buildGoogleMapsUrl(plan)} target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] underline">Open in Google Maps</a>
+                    Map: <a href={buildGoogleMapsUrl(plan, lastUsedPrefs?.origin)} target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] underline">Open in Google Maps</a>
                   </p>
                 )}
               </div>
@@ -1522,8 +2028,8 @@ export default function Home() {
         )}
 
         {copySuccess && (
-          <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-[var(--accent)] bg-[var(--card)] px-5 py-3 text-[14px] text-[var(--foreground)] shadow-lg">
-            Copied. Paste into ChatGPT or any AI to keep refining.
+          <div className="atlas-toast fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-[var(--accent)]/40 bg-[var(--card)] px-5 py-3 text-[14px] font-medium text-[var(--foreground)] shadow-lg" role="status" aria-live="polite">
+            Copied. Paste into your AI assistant to refine further.
           </div>
         )}
 
@@ -1531,7 +2037,7 @@ export default function Home() {
         <div className="flex flex-col gap-8">
           {/* Compact top bar: navigation + save/share/my trips */}
           <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[var(--border)] bg-[var(--card)]/40 px-5 py-4">
-            <p className="w-full text-[13px] text-[var(--muted)]/80 md:w-auto md:max-w-sm">Your trip is below. Save to keep it, or use Share to send a link. Export to copy a summary, add to calendar, or print a report.</p>
+            <p className="w-full text-[13px] text-[var(--muted)]/80 md:w-auto md:max-w-sm">Your itinerary, your way. Drag to reorder, Swap to replace. Use the Copilot to refine anything—then save, share, or export.</p>
             <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
@@ -1558,34 +2064,14 @@ export default function Home() {
                   >
                     Share
                   </button>
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => { fetchTrips(); setMyTripsOpen((v) => !v); }}
-                      disabled={loadingTrips}
-                      className="rounded-lg border border-[var(--border)] px-4 py-2 text-[13px] uppercase tracking-wider text-[var(--muted)] hover:text-[var(--foreground)]"
-                    >
-                      {loadingTrips ? "Loading…" : "My trips"}
-                    </button>
-                    {myTripsOpen && savedTrips.length > 0 && (
-                      <>
-                        <div className="fixed inset-0 z-10" aria-hidden onClick={() => setMyTripsOpen(false)} />
-                        <ul className="absolute left-0 top-full z-20 mt-1 max-h-56 w-64 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] p-2 shadow-sm">
-                          {savedTrips.map((t) => (
-                            <li key={t.id}>
-                              <button
-                                type="button"
-                                onClick={() => { loadTrip(t.id); setMyTripsOpen(false); }}
-                                className="w-full rounded-md px-3 py-2 text-left text-[13px] transition-colors hover:bg-[var(--accent-soft)]/50"
-                              >
-                                {(t.payload as PlanResponse)?.trip?.title ?? "Untitled"} · {new Date(t.updated_at).toLocaleDateString()}
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      </>
-                    )}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { fetchTrips(); setMyTripsOpen(true); }}
+                    disabled={loadingTrips}
+                    className="rounded-lg border border-[var(--border)] px-4 py-2 text-[13px] uppercase tracking-wider text-[var(--muted)] hover:text-[var(--foreground)]"
+                  >
+                    {loadingTrips ? "Loading…" : "My trips"}
+                  </button>
                 </>
               )}
               {!user && (
@@ -1605,32 +2091,40 @@ export default function Home() {
                 {exportOpen && (
                   <>
                     <div className="fixed inset-0 z-10" aria-hidden onClick={() => setExportOpen(false)} />
-                    <div className="absolute right-0 top-full z-20 mt-1 w-56 rounded-lg border border-[var(--border)] bg-[var(--card)] py-2 shadow-sm">
-                      <p className="px-4 py-1 text-[11px] uppercase tracking-wider text-[var(--muted)]">Take your trip elsewhere</p>
+                    <div className="absolute right-0 top-full z-20 mt-2 w-64 rounded-xl border border-[var(--border)] bg-[var(--card)] py-3 shadow-lg">
+                      <p className="px-4 pb-2 text-[11px] font-medium uppercase tracking-widest text-[var(--muted)]">Export</p>
                       <button
                         type="button"
                         onClick={copySummaryForAI}
-                        className="w-full px-4 py-2.5 text-left text-[13px] text-[var(--foreground)] hover:bg-[var(--muted-bg)]/50"
+                        className="w-full px-4 py-3 text-left text-[14px] font-medium text-[var(--foreground)] hover:bg-[var(--muted-bg)]/50 transition-colors"
                       >
-                        Copy summary for AI
+                        Copy for AI
                       </button>
-                      <p className="mx-4 mt-1 text-[11px] text-[var(--muted)]/80">Paste into ChatGPT or any AI to keep refining.</p>
+                      <p className="px-4 text-[12px] text-[var(--muted)]/90">Markdown summary to paste into ChatGPT or Claude.</p>
+                      <button
+                        type="button"
+                        onClick={downloadJson}
+                        className="w-full px-4 py-3 text-left text-[14px] font-medium text-[var(--foreground)] hover:bg-[var(--muted-bg)]/50 transition-colors"
+                      >
+                        Download JSON
+                      </button>
+                      <p className="px-4 text-[12px] text-[var(--muted)]/90">Full trip data for backup or integration.</p>
                       <button
                         type="button"
                         onClick={() => { setExportOpen(false); setCalendarModalOpen(true); if (!calendarStartDate) setCalendarStartDate(new Date().toISOString().slice(0, 10)); }}
-                        className="w-full px-4 py-2.5 text-left text-[13px] text-[var(--foreground)] hover:bg-[var(--muted-bg)]/50"
+                        className="mt-2 w-full px-4 py-3 text-left text-[14px] font-medium text-[var(--foreground)] hover:bg-[var(--muted-bg)]/50 transition-colors"
                       >
                         Add to calendar
                       </button>
-                      <p className="mx-4 mt-1 text-[11px] text-[var(--muted)]/80">Download .ics for Outlook, Apple Calendar, etc.</p>
+                      <p className="px-4 text-[12px] text-[var(--muted)]/90">Download .ics for Outlook, Apple Calendar, Google.</p>
                       <button
                         type="button"
                         onClick={() => { setExportOpen(false); setReportOpen(true); }}
-                        className="w-full px-4 py-2.5 text-left text-[13px] text-[var(--foreground)] hover:bg-[var(--muted-bg)]/50"
+                        className="mt-2 w-full px-4 py-3 text-left text-[14px] font-medium text-[var(--foreground)] hover:bg-[var(--muted-bg)]/50 transition-colors"
                       >
-                        Trip report (print / PDF)
+                        Trip report
                       </button>
-                      <p className="mx-4 mt-1 text-[11px] text-[var(--muted)]/80">Full report to print or save as PDF.</p>
+                      <p className="px-4 text-[12px] text-[var(--muted)]/90">Print or save as PDF.</p>
                     </div>
                   </>
                 )}
@@ -1638,72 +2132,109 @@ export default function Home() {
             </div>
           </div>
 
-          <section className="min-h-0 rounded-xl border border-[var(--border)] bg-[var(--card)]/20 p-8 md:p-10">
+          <section className="min-h-0 rounded-xl border border-[var(--border)] bg-[var(--card)] p-8 md:p-10 lg:p-12">
             {plan ? (
-              <div>
+              <div className="max-w-[900px]">
                 {tripPhoto?.url && (
-                  <div className="mb-12 overflow-hidden rounded-xl">
+                  <div className="mb-14 overflow-hidden rounded-xl">
                     <img
                       src={tripPhoto.url}
                       alt={tripPhoto.alt}
-                      className="h-80 w-full object-cover"
+                      className="h-72 w-full object-cover md:h-80"
                     />
                     <p className="mt-2 text-right text-[12px] text-[var(--muted)]">Photo: Unsplash</p>
                   </div>
                 )}
-                <h2 className="font-heading text-3xl font-medium tracking-tight text-[var(--foreground)] sm:text-4xl uppercase">{plan.trip.recommended_region}</h2>
+                <h2 className="font-heading text-3xl font-medium tracking-tight text-[var(--foreground)] sm:text-4xl">{plan.trip.recommended_region}</h2>
                 <p className="mt-3 text-xl italic text-[var(--muted)]">{plan.trip.title}</p>
                 <p className="mt-6 text-[16px] leading-relaxed text-[var(--muted)]">{plan.trip.summary}</p>
 
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="mt-5 flex flex-wrap gap-2">
                   <span className="text-[13px] text-[var(--muted)]">{plan.trip.best_season} · {plan.trip.pace}</span>
                   {plan.trip.vibe_tags?.map((t) => (
                     <span key={t} className="text-[12px] text-[var(--muted)]">#{t}</span>
                   ))}
                 </div>
 
-                <p className="mt-8 text-[14px] text-[var(--muted)]">
-                  Drag activities to reorder. Click any activity to edit it. Use &quot;Swap&quot; to pick a different place for that slot. Open the AI Copilot to ask for more museums, a slower pace, or anything else.
-                </p>
+                {(() => {
+                  const ctx = getDestinationContext(plan.trip.recommended_region ?? "");
+                  if (!ctx) return null;
+                  return (
+                    <details className="mt-10 rounded-xl border border-[var(--border)] bg-[var(--muted-bg)]/30 overflow-hidden">
+                      <summary className="cursor-pointer list-none px-5 py-4 text-[14px] font-medium text-[var(--foreground)] hover:bg-[var(--muted-bg)]/50">
+                        About this destination
+                      </summary>
+                      <div className="border-t border-[var(--border)] px-5 py-5 space-y-5 text-[14px]">
+                        <div>
+                          <p className="font-medium text-[var(--foreground)]">When to go</p>
+                          <p className="mt-1 text-[var(--muted)]">{ctx.bestTime}</p>
+                          <p className="mt-1 text-[13px] text-[var(--muted)]">{ctx.bestTimeWhy}</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-[var(--foreground)]">Must-sees</p>
+                          <ul className="mt-2 space-y-1.5">
+                            {ctx.topSights.map((s, i) => (
+                              <li key={i} className="text-[var(--muted)]">
+                                <span className="text-[var(--foreground)]">{s.name}</span>
+                                {s.why && <span> — {s.why}</span>}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    </details>
+                  );
+                })()}
 
-                <div className="mt-6 flex flex-wrap items-center gap-3">
+                <div className="mt-12 flex flex-wrap items-center gap-3 border-b border-[var(--border)] pb-8">
+                  <span className="text-[13px] font-medium uppercase tracking-wider text-[var(--muted)]">View</span>
                   <button
                     type="button"
                     onClick={() => setUniverseView("timeline")}
-                    className={`rounded-lg px-3.5 py-2 text-[12px] ${universeView === "timeline" ? "bg-[var(--accent)] text-[var(--card)]" : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"}`}
+                    className={`rounded-lg px-4 py-2.5 text-[13px] ${universeView === "timeline" ? "bg-[var(--accent)] text-[var(--card)]" : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"}`}
                   >
                     Timeline
                   </button>
                   <button
                     type="button"
                     onClick={() => setUniverseView("calendar")}
-                    className={`rounded-lg px-3.5 py-2 text-[12px] ${universeView === "calendar" ? "bg-[var(--accent)] text-[var(--card)]" : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"}`}
+                    className={`rounded-lg px-4 py-2.5 text-[13px] ${universeView === "calendar" ? "bg-[var(--accent)] text-[var(--card)]" : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"}`}
                   >
                     Calendar
                   </button>
                   <select
                     value={activityFilter}
                     onChange={(e) => setActivityFilter(e.target.value)}
-                    className="rounded-lg border border-[var(--border)] bg-[var(--muted-bg)]/30 px-3 py-2 text-[12px] text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
+                    className="rounded-lg border border-[var(--border)] bg-[var(--muted-bg)]/50 px-3 py-2.5 text-[13px] text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
+                    aria-label="Filter by activity type"
                   >
                     <option value="">All activities</option>
                     {["food", "nature", "culture", "nightlife", "relax", "logistics"].map((t) => (
                       <option key={t} value={t}>{t}</option>
                     ))}
                   </select>
-                  <GoogleMapsLink plan={plan} />
-                  <button
-                    type="button"
-                    onClick={() => setCopilotOpen((v) => !v)}
-                    className="rounded-lg border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 text-[13px] font-medium text-[var(--card)] hover:opacity-90"
-                  >
-                    {copilotOpen ? "Hide Copilot" : "AI Copilot"}
-                  </button>
+                  <div className="ml-auto flex flex-wrap items-center gap-2">
+                    <GoogleMapsLink plan={plan} origin={lastUsedPrefs?.origin} />
+                    <button
+                      type="button"
+                      onClick={() => setCopilotOpen((v) => !v)}
+                      className="rounded-lg border border-[var(--accent)] bg-[var(--accent)] px-4 py-2.5 text-[13px] font-medium text-[var(--card)] hover:opacity-90"
+                    >
+                      {copilotOpen ? "Hide Copilot" : "AI Copilot"}
+                    </button>
+                  </div>
+                </div>
+
+                <p className="mt-6 text-[14px] text-[var(--muted)]">
+                  Drag to reorder, click to edit, Swap to try another spot. Use the Copilot to refine the whole plan.
+                </p>
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <span className="text-[12px] text-[var(--muted)]">Quick edits:</span>
                   <button
                     type="button"
                     onClick={() => sendCopilotMessage("Make the trip more expensive / upscale")}
                     disabled={copilotLoading}
-                    className="rounded-lg border border-[var(--border)] px-3.5 py-2 text-[12px] text-[var(--muted)] hover:text-[var(--foreground)] disabled:opacity-50"
+                    className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-[12px] text-[var(--muted)] hover:text-[var(--foreground)] disabled:opacity-50"
                   >
                     More expensive
                   </button>
@@ -1711,7 +2242,7 @@ export default function Home() {
                     type="button"
                     onClick={() => sendCopilotMessage("Make the trip less expensive / budget-friendly")}
                     disabled={copilotLoading}
-                    className="rounded-lg border border-[var(--border)] px-3.5 py-2 text-[12px] text-[var(--muted)] hover:text-[var(--foreground)] disabled:opacity-50"
+                    className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-[12px] text-[var(--muted)] hover:text-[var(--foreground)] disabled:opacity-50"
                   >
                     Less expensive
                   </button>
@@ -1727,17 +2258,17 @@ export default function Home() {
                   }}
                 >
                   {universeView === "timeline" && (
-                  <div className="mt-12 overflow-x-auto pb-6">
-                    <div className="flex min-w-max gap-14">
-                      {plan.itinerary?.map((d) => (
-                        <div key={d.day} className="w-96 shrink-0 flex flex-col gap-6">
-                          <div className="border-b border-[var(--border)] pb-4">
-                            <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-[var(--muted)]">Day {d.day}</p>
-                            <p className="mt-2 font-heading text-xl text-[var(--foreground)]">{d.base_location}</p>
-                          </div>
+                  <div className="mt-10 w-full space-y-14 pb-16">
+                    {plan.itinerary?.map((d) => (
+                      <div key={d.day} className="border-b border-[var(--border)] pb-14 last:border-b-0 last:pb-0">
+                        <div className="mb-8">
+                          <p className="text-[12px] font-medium uppercase tracking-widest text-[var(--muted)]">Day {d.day}</p>
+                          <p className="mt-1 font-heading text-2xl font-medium tracking-tight text-[var(--foreground)]">{d.base_location}</p>
+                        </div>
+                        <div className="space-y-10">
                           {TIME_SLOTS.map((time) => (
-                            <div key={time} className="flex flex-col gap-1">
-                              <p className="text-[11px] font-medium uppercase tracking-wider text-[var(--muted)]">
+                            <div key={time} className="space-y-4">
+                              <p className="text-[12px] font-medium uppercase tracking-wider text-[var(--muted)]">
                                 {time === "morning" ? "Morning" : time === "afternoon" ? "Afternoon" : "Evening"}
                               </p>
                               <TimeBlock
@@ -1752,32 +2283,71 @@ export default function Home() {
                             </div>
                           ))}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                  )}
-                  {universeView === "calendar" && plan.itinerary && (
-                  <div className="mt-12 grid grid-cols-7 gap-4 sm:grid-cols-10">
-                    {plan.itinerary.map((d) => (
-                      <div
-                        key={d.day}
-                        className="min-h-28 rounded-xl border border-[var(--border)] bg-[var(--card)]/50 p-4"
-                      >
-                        <p className="text-[11px] font-medium text-[var(--muted)]">Day {d.day}</p>
-                        <p className="mt-0.5 truncate text-[12px] text-[var(--foreground)]">{d.base_location}</p>
-                        <p className="mt-2 text-[11px] text-[var(--muted)]">{d.blocks.length} steps</p>
                       </div>
                     ))}
                   </div>
                   )}
+                  {universeView === "calendar" && plan.itinerary && (() => {
+                    const start = calendarStartDate ? new Date(calendarStartDate + "T12:00:00") : new Date();
+                    const daysInTrip = plan.itinerary.length;
+                    const weekStartsOnMonday = true;
+                    const dayLabels = weekStartsOnMonday ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+                    const year = start.getFullYear();
+                    const month = start.getMonth();
+                    const firstOfMonth = new Date(year, month, 1);
+                    let firstCell = new Date(firstOfMonth);
+                    const dow = firstOfMonth.getDay();
+                    const offset = weekStartsOnMonday ? (dow === 0 ? 6 : dow - 1) : dow;
+                    firstCell.setDate(firstCell.getDate() - offset);
+                    const cells: { date: Date; dayNum: number | null; location: string; blocks: number }[] = [];
+                    const totalCells = 42;
+                    for (let i = 0; i < totalCells; i++) {
+                      const d = new Date(firstCell);
+                      d.setDate(firstCell.getDate() + i);
+                      const tripDayIndex = Math.floor((d.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+                      const inRange = tripDayIndex >= 0 && tripDayIndex < daysInTrip;
+                      const dayNum = inRange ? tripDayIndex + 1 : null;
+                      const loc = inRange ? plan.itinerary[tripDayIndex].base_location : "";
+                      const blocks = inRange ? plan.itinerary[tripDayIndex].blocks.length : 0;
+                      cells.push({ date: d, dayNum, location: loc, blocks });
+                    }
+                    const monthTitle = firstOfMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+                    return (
+                      <div className="mt-10 w-full overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--muted-bg)]/20 pb-16">
+                        <p className="border-b border-[var(--border)] bg-[var(--muted-bg)]/50 px-4 py-4 text-center font-heading text-base font-medium text-[var(--foreground)]">{monthTitle}</p>
+                        <div className="grid grid-cols-7 text-[12px]">
+                          {dayLabels.map((label) => (
+                            <div key={label} className="border-b border-r border-[var(--border)]/60 py-3 text-center font-medium text-[var(--muted)] last:border-r-0">
+                              {label}
+                            </div>
+                          ))}
+                          {cells.map((c, i) => (
+                            <div
+                              key={i}
+                              className={`min-h-[84px] border-b border-r border-[var(--border)]/60 p-3 last:border-r-0 ${c.dayNum != null ? "bg-[var(--accent-soft)]/50" : "bg-[var(--card)]/30"}`}
+                            >
+                              <span className={c.dayNum != null ? "font-semibold text-[var(--accent)]" : "text-[var(--muted)]"}>{c.date.getDate()}</span>
+                              {c.dayNum != null && (
+                                <>
+                                  <p className="mt-1 truncate text-[11px] font-medium text-[var(--foreground)]">Day {c.dayNum}</p>
+                                  <p className="mt-0.5 truncate text-[11px] text-[var(--muted)]">{c.location}</p>
+                                  <p className="mt-1 text-[10px] text-[var(--muted)]">{c.blocks} activities</p>
+                                </>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   <DragOverlay>
                     {activeBlock ? (
-                      <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
-                        <div className="text-[15px] font-medium text-[var(--foreground)]">{activeBlock.title}</div>
+                      <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-lg ring-2 ring-[var(--accent)]/20">
+                        <div className="text-[16px] font-medium text-[var(--foreground)]">{activeBlock.title}</div>
                         {activeBlock.notes ? (
-                          <div className="mt-1 text-[13px] text-[var(--muted)]">{activeBlock.notes}</div>
+                          <div className="mt-2 text-[14px] text-[var(--muted)]">{activeBlock.notes}</div>
                         ) : null}
-                        <span className="mt-2 inline-block rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-2.5 py-0.5 text-[12px] text-[var(--muted)]">
+                        <span className="mt-3 inline-block rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-2.5 py-1 text-[12px] text-[var(--muted)]">
                           {activeBlock.type}
                         </span>
                       </div>
@@ -1821,17 +2391,15 @@ function TimeBlock({
   return (
     <div
       ref={setNodeRef}
-      className={`min-h-[72px] rounded-xl border border-[var(--border)] bg-[var(--card)]/50 p-4 transition-colors duration-200 ${
-        isOver ? "border-[var(--accent)]/40 bg-[var(--muted-bg)]/50" : ""
+      className={`min-h-[88px] rounded-xl border border-[var(--border)] bg-[var(--muted-bg)]/30 p-5 transition-colors duration-200 ${
+        isOver ? "border-[var(--accent)]/60 bg-[var(--muted-bg)]/60" : ""
       }`}
       aria-label={`Day ${day}, ${title}`}
     >
-      <p className="text-[11px] font-medium uppercase tracking-[0.15em] text-[var(--muted)]">{title}</p>
-
       <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
-        <ul className="mt-3 space-y-3 text-[15px] text-[var(--muted)]">
+        <ul className="space-y-4 text-[15px] text-[var(--muted)]">
           {items.length === 0 ? (
-            <li className="rounded-xl border border-dashed border-[var(--border)] py-6 text-center text-[13px] text-[var(--muted)]">
+            <li className="rounded-xl border border-dashed border-[var(--border)] py-8 text-center text-[13px] text-[var(--muted)]">
               Drop here
             </li>
           ) : (
@@ -1916,13 +2484,13 @@ function SortableBlock({
       ref={setNodeRef}
       style={style}
       title={hoverTitle}
-      className={`rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 transition-shadow ${
-        isDragging ? "opacity-95 shadow-sm ring-1 ring-[var(--accent)]/20" : "hover:shadow-sm"
+      className={`rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 transition-shadow ${
+        isDragging ? "opacity-95 shadow-md ring-2 ring-[var(--accent)]/30" : "hover:shadow-sm"
       }`}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-4">
         <div
-          className="mt-1 shrink-0 cursor-grab touch-none rounded-md p-1 text-[var(--muted)] hover:bg-[var(--muted-bg)] active:cursor-grabbing"
+          className="mt-1.5 shrink-0 cursor-grab touch-none rounded-lg p-2 text-[var(--muted)] hover:bg-[var(--muted-bg)] active:cursor-grabbing"
           {...attributes}
           {...listeners}
           aria-label={`Drag to reorder: ${block.title}`}
@@ -1970,7 +2538,7 @@ function SortableBlock({
             <button
               type="button"
               onClick={() => setEditingTitle(true)}
-              className="w-full rounded-lg text-left text-[15px] font-medium text-[var(--foreground)] focus:outline-none focus:border-[var(--accent)]"
+              className="mt-0.5 w-full rounded-lg text-left text-[16px] font-medium leading-snug text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
             >
               {block.title}
             </button>
@@ -1987,7 +2555,7 @@ function SortableBlock({
                   setEditingNotes(false);
                 }
               }}
-              className="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--muted-bg)]/50 px-3 py-2 text-[14px] outline-none focus:border-[var(--accent)] resize-none"
+              className="mt-3 w-full rounded-lg border border-[var(--border)] bg-[var(--muted-bg)]/50 px-3 py-2.5 text-[14px] outline-none focus:border-[var(--accent)] resize-none"
               rows={2}
               autoFocus
               aria-label="Edit activity notes"
@@ -1996,13 +2564,13 @@ function SortableBlock({
             <button
               type="button"
               onClick={() => setEditingNotes(true)}
-              className={`mt-2 block w-full rounded-lg text-left text-[14px] focus:outline-none focus:border-[var(--accent)] ${!block.notes ? "italic text-[var(--muted)]" : ""}`}
+              className={`mt-3 block w-full rounded-lg text-left text-[14px] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] ${!block.notes ? "italic text-[var(--muted)]" : "text-[var(--muted)]"}`}
             >
               {block.notes || "Add notes…"}
             </button>
           )}
 
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             <select
               value={block.type}
               onChange={(e) =>

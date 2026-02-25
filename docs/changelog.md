@@ -91,3 +91,15 @@ Append-only, chronological record of changes (oldest first). Add new entries at 
 - **Single-destination itinerary:** `POST /api/plan/destination` accepts `{ destination: string, prefs }`; returns one `PlanResponse` for that city (OpenAI, same schema as plan alternatives).
 - **Explore universes UI:** Params page: “Or explore universes” goes to suggestions step and opens the table. Suggestions step: “Explore universes” button opens a modal with a sortable table (City, Country, Travel h, °C, Rain, Beauty, Culture, Price, Action). “Enter trip universe” on a row generates an itinerary for that destination and switches to universe. Table is pre-filtered by current prefs (max travel time, priciness, transport).
 - **Block alternatives:** `POST /api/block-alternatives` accepts `{ location, type, currentTitle? }`; returns 6–8 alternative venues (title, notes, rating) for that activity type in that location (OpenAI). Universe timeline: each activity block has a “Swap” button; opens modal with alternatives; selecting one updates the block title/notes.
+
+---
+
+## Destination database and dynamic enrichment
+
+- **Schema:** `docs/supabase-schema-destinations.sql`: `destinations` table (id, name, country, region, lat/lng, transport_modes, scores: beauty, culture, luxury, party, relax, beach_access, food, safety, family, priciness, best_months); `destination_weather_cache` and `destination_distance_cache` for optional enrichment. Run after main + auth schemas.
+- **Docs:** `docs/DESTINATION_DATABASE.md` defines static vs dynamic columns, data sources (Open-Meteo, Nominatim, haversine), granularity rule (major accessible cities only), and current implementation (in-memory list + optional enrichment).
+- **Destinations list:** `lib/destinations.ts` extended with `lat`, `lng`, `transport_modes`, `relaxScore`, `beachAccessScore` for all entries; 20+ new destinations (e.g. Taormina, Positano, Amalfi, Cinque Terre, Mykonos, Málaga, Valencia, San Sebastián, Bruges, Salzburg, Interlaken, Rhodes, Corfu). Sort keys: `distanceKm`, `relaxScore`, `beachAccessScore`.
+- **Weather:** `lib/weather-openmeteo.ts` calls Open-Meteo Climate API (free, no key) when user provides date range; batched requests, in-memory cache by (lat, lng, year_month). Used only when `date_from` / `date_to` are set.
+- **Distance:** `lib/distance.ts`: geocode via Nominatim (cached 7 days), haversine distance, rule-of-thumb travel time. Used when `origin` is set.
+- **API:** `GET /api/destinations` accepts optional `origin`, `date_from`, `date_to`; when present enriches list with distance/travel time and/or climate data. No AI; caches limit external calls.
+- **Explore UI:** Departure city and optional “Weather from / to” dates in Explore modal; table shows Dist (km), Travel (h), Relax, Beach columns. All destinations have coords and scores for full enrichment.

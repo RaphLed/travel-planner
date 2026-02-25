@@ -17,6 +17,7 @@ flowchart TB
 
     subgraph API["Next.js API routes"]
         Plan["/api/plan\n(itinerary alternatives)"]
+        Dest["/api/destinations\n(Explore list + enrichment)"]
         Photo["/api/photo\n(trip images)"]
         Copilot["/api/copilot\n(refine trip)"]
         Trips["/api/trips\n(save & load)"]
@@ -26,6 +27,8 @@ flowchart TB
         OpenAI["OpenAI\n(plan + copilot)"]
         Unsplash["Unsplash\n(photos)"]
         Supabase["Supabase\n(trips + cache)"]
+        OpenMeteo["Open-Meteo\n(climate for dates)"]
+        Nominatim["Nominatim\n(geocode origin)"]
     end
 
     Step1 -->|"Find my trips"| Plan
@@ -68,8 +71,9 @@ stateDiagram-v2
 | Styling   | Tailwind CSS (CSS variables for theme) |
 | AI        | OpenAI (plan generation + copilot refinements) |
 | DnD       | @dnd-kit (core + sortable + DragOverlay, a11y) |
-| DB        | Supabase (trips, plan_cache) |
+| DB        | Supabase (trips, plan_cache; optional: destinations, destination_weather_cache, destination_distance_cache) |
 | Photos    | Unsplash (server-side via `/api/photo`; placeholder if unset) |
+| Explore   | Open-Meteo Climate (weather by date range), Nominatim (geocode), haversine (distance); no API keys for free tier |
 
 ---
 
@@ -81,11 +85,12 @@ stateDiagram-v2
 | Plan API  | `app/api/plan/route.ts` (OpenAI + plan_cache) |
 | Photo API | `app/api/photo/route.ts` |
 | Copilot   | `app/api/copilot/route.ts` |
+| Destinations | `app/api/destinations/route.ts` (filter/sort; optional origin → distance, date range → weather via `lib/distance.ts`, `lib/weather-openmeteo.ts`) |
 | Trips     | `app/api/trips/route.ts`, `app/api/trips/[id]/route.ts`, `app/api/trips/[id]/share/route.ts` |
 | Share     | `app/api/share/[token]/route.ts` (GET trip, PATCH if editor; uses service role) |
 | Auth      | Supabase Auth via `lib/supabase/client.ts` (browser), `lib/supabase/server.ts` (API); `app/auth/callback/route.ts` |
 | Types     | `lib/types.ts`, `lib/trip-preferences.ts` |
-| DB schema | `docs/supabase-schema.sql`, `docs/supabase-schema-auth-and-share.sql` |
+| DB schema | `docs/supabase-schema.sql`, `docs/supabase-schema-auth-and-share.sql`, `docs/supabase-schema-destinations.sql` |
 | Env       | `.env.example` (SUPABASE_SERVICE_ROLE_KEY for share links) |
 
 ---

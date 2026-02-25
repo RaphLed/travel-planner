@@ -78,3 +78,38 @@ export async function PATCH(
   }
   return NextResponse.json(data);
 }
+
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const supabase = await createClient();
+  if (!supabase) {
+    return NextResponse.json(
+      { error: "Database not configured" },
+      { status: 503 }
+    );
+  }
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json(
+      { error: "Sign in to delete trips" },
+      { status: 401 }
+    );
+  }
+  const { error } = await supabase
+    .from("trips")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", user.id);
+  if (error) {
+    if (error.code === "PGRST116") {
+      return NextResponse.json({ error: "Trip not found" }, { status: 404 });
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  return new Response(null, { status: 204 });
+}

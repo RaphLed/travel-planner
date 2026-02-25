@@ -1,6 +1,9 @@
 import type { Block } from "@/lib/types";
 import OpenAI from "openai";
 
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const blockAlternativesCache = new Map<string, { payload: BlockAlternative[]; at: number }>();
+
 export type BlockAlternative = {
   title: string;
   notes?: string;
@@ -39,6 +42,15 @@ export async function POST(req: Request) {
       "logistics",
     ];
     const activityType = validTypes.includes(type) ? type : "culture";
+
+    const cacheKey = `${location.toLowerCase().trim()}|${activityType}`;
+    const cached = blockAlternativesCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
+      return new Response(JSON.stringify({ alternatives: cached.payload }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
@@ -105,6 +117,8 @@ Only include "type" as "${activityType}".`,
     const alternatives = Array.isArray(parsed.alternatives)
       ? (parsed.alternatives as BlockAlternative[]).slice(0, 8)
       : [];
+
+    blockAlternativesCache.set(cacheKey, { payload: alternatives, at: Date.now() });
 
     return new Response(JSON.stringify({ alternatives }), {
       status: 200,
